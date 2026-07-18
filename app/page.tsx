@@ -2,6 +2,13 @@
 
 import { useEffect, useState } from "react";
 
+import {
+  BookOpen,
+  CalendarDays,
+  GraduationCap,
+  Users,
+} from "lucide-react";
+
 import Header from "@/components/dashboard/Header";
 import RecentActivity from "@/components/dashboard/RecentActivity";
 import StatCard from "@/components/dashboard/StatCard";
@@ -14,9 +21,11 @@ export default function DashboardPage() {
   const [activeStudentCount, setActiveStudentCount] = useState<number | null>(
     null
   );
+
   const [activeTeacherCount, setActiveTeacherCount] = useState<number | null>(
     null
   );
+
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -40,9 +49,15 @@ export default function DashboardPage() {
         setActiveStudentCount(studentCount);
         setActiveTeacherCount(teacherCount);
       } catch (error) {
-        console.error("ダッシュボードデータの取得に失敗しました。", error);
+        console.error(
+          "ダッシュボードデータの取得に失敗しました。",
+          error
+        );
 
-        setError("ダッシュボードの情報を取得できませんでした。");
+        setError(
+          "ダッシュボードの情報を取得できませんでした。"
+        );
+
         setActiveStudentCount(0);
         setActiveTeacherCount(0);
       }
@@ -69,6 +84,7 @@ export default function DashboardPage() {
               ? "読み込み中..."
               : `${activeStudentCount}人`
           }
+          icon={GraduationCap}
         />
 
         <StatCard
@@ -78,14 +94,23 @@ export default function DashboardPage() {
               ? "読み込み中..."
               : `${activeTeacherCount}人`
           }
+          icon={Users}
         />
 
-        <StatCard title="本日の授業" value="0コマ" />
+        <StatCard
+          title="本日の授業"
+          value="0コマ"
+          icon={BookOpen}
+        />
 
-        <StatCard title="空き教室" value="0室" />
+        <StatCard
+          title="空き教室"
+          value="0室"
+          icon={CalendarDays}
+        />
       </div>
 
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.4fr_1fr]">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.6fr_1fr]">
         <RecentActivity />
 
         <WelcomeCard />

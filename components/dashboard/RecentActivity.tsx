@@ -1,14 +1,7 @@
 "use client";
 
-import {
-  useEffect,
-  useState,
-} from "react";
-
-import {
-  Clock3,
-  History,
-} from "lucide-react";
+import { useEffect, useState } from "react";
+import { Clock3, History } from "lucide-react";
 
 import {
   Activity,
@@ -16,19 +9,17 @@ import {
 } from "@/lib/firebase/activities";
 
 const formatActivityTime = (
-  activity: Activity
+  activity: Activity,
+  currentTime: Date
 ) => {
   if (!activity.createdAt) {
     return "たった今";
   }
 
-  const createdAt =
-    activity.createdAt.toDate();
-
-  const now = new Date();
+  const createdAt = activity.createdAt.toDate();
 
   const difference =
-    now.getTime() - createdAt.getTime();
+    currentTime.getTime() - createdAt.getTime();
 
   const minutes = Math.floor(
     difference / (1000 * 60)
@@ -62,24 +53,42 @@ const formatActivityTime = (
     return `${days}日前`;
   }
 
-  return createdAt.toLocaleDateString(
-    "ja-JP",
-    {
-      month: "numeric",
-      day: "numeric",
-    }
-  );
+  return createdAt.toLocaleDateString("ja-JP", {
+    month: "numeric",
+    day: "numeric",
+  });
+};
+
+const getActivityDotClassName = (
+  action: Activity["action"]
+) => {
+  switch (action) {
+    case "create":
+      return "bg-emerald-500";
+
+    case "update":
+      return "bg-blue-500";
+
+    case "delete":
+      return "bg-red-500";
+
+    default:
+      return "bg-zinc-400";
+  }
 };
 
 export default function RecentActivity() {
-  const [activities, setActivities] =
-    useState<Activity[]>([]);
+  const [activities, setActivities] = useState<
+    Activity[]
+  >([]);
 
-  const [loading, setLoading] =
-    useState(true);
+  const [loading, setLoading] = useState(true);
 
-  const [error, setError] =
-    useState("");
+  const [error, setError] = useState("");
+
+  const [currentTime, setCurrentTime] = useState(
+    new Date()
+  );
 
   useEffect(() => {
     const fetchActivities = async () => {
@@ -87,8 +96,7 @@ export default function RecentActivity() {
         setLoading(true);
         setError("");
 
-        const data =
-          await getRecentActivities(6);
+        const data = await getRecentActivities(6);
 
         setActivities(data);
       } catch (error) {
@@ -108,10 +116,20 @@ export default function RecentActivity() {
     fetchActivities();
   }, []);
 
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setCurrentTime(new Date());
+    }, 60 * 1000);
+
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, []);
+
   return (
     <div className="rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm">
       <div className="flex items-center gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-zinc-100">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-zinc-100">
           <History
             className="h-5 w-5 text-zinc-600"
             strokeWidth={1.8}
@@ -129,7 +147,7 @@ export default function RecentActivity() {
         </div>
       </div>
 
-      <div className="mt-6">
+      <div className="mt-6" aria-live="polite">
         {loading ? (
           <div className="py-8 text-center text-sm text-zinc-500">
             読み込み中...
@@ -150,9 +168,13 @@ export default function RecentActivity() {
                 className="flex items-start justify-between gap-4 border-b border-zinc-100 py-4 first:pt-0 last:border-none last:pb-0"
               >
                 <div className="flex min-w-0 items-start gap-3">
-                  <div className="mt-2 h-2 w-2 shrink-0 rounded-full bg-emerald-500" />
+                  <div
+                    className={`mt-2 h-2 w-2 shrink-0 rounded-full ${getActivityDotClassName(
+                      activity.action
+                    )}`}
+                  />
 
-                  <p className="text-sm leading-6 text-zinc-700">
+                  <p className="min-w-0 text-sm leading-6 text-zinc-700">
                     {activity.message}
                   </p>
                 </div>
@@ -165,7 +187,8 @@ export default function RecentActivity() {
 
                   <span>
                     {formatActivityTime(
-                      activity
+                      activity,
+                      currentTime
                     )}
                   </span>
                 </div>
