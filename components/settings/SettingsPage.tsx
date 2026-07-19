@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import PageHeader from "@/components/common/PageHeader";
 
+import CourseSettings from "./CourseSettings";
 import RegularSettings from "./RegularSettings";
 
 export type SettingsMenu =
@@ -132,12 +133,9 @@ export default function SettingsPage() {
             <RegularSettings />
           )}
 
-          {selectedMenu === "courses" && (
-            <ComingSoon
-              title="講習設定"
-              description="春期講習、夏期講習、冬期講習、その他の講習設定を管理する画面です。"
-            />
-          )}
+         {selectedMenu === "courses" && (
+  <CourseSettings />
+)}
 
           {selectedMenu === "classrooms" && (
             <ComingSoon
