@@ -4,7 +4,7 @@ import { useState } from "react";
 
 import PageHeader from "@/components/common/PageHeader";
 
-import RegularLessonSettings from "./regular/RegularLessonSettings";
+import RegularSettings from "./RegularSettings";
 
 export type SettingsMenu =
   | "regular"
@@ -129,7 +129,7 @@ export default function SettingsPage() {
 
         <main className="min-w-0">
           {selectedMenu === "regular" && (
-            <RegularLessonSettings />
+            <RegularSettings />
           )}
 
           {selectedMenu === "courses" && (

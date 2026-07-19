@@ -16,9 +16,9 @@ import { defaultScheduleSettings } from "@/lib/schedule/defaultScheduleSettings"
 
 import type { RegularScheduleSettings } from "@/types/schedule-settings";
 
-import RegularLessonRuleSettings from "./RegularLessonRuleSettings";
-import RegularPeriodSettings from "./RegularPeriodSettings";
-import RegularWeekdaySettings from "./RegularWeekdaySettings";
+import LessonRuleSettings from "@/components/settings/LessonRuleSettings";
+import PeriodSettings from "@/components/settings/PeriodSettings";
+import WeekdaySettings from "@/components/settings/WeekdaySettings";
 
 function cloneDefaultSettings(): RegularScheduleSettings {
   return {
@@ -223,38 +223,40 @@ export default function RegularLessonSettings() {
         </div>
       )}
 
-      <RegularWeekdaySettings
-        value={settings.enabledWeekdays}
-        onChange={(enabledWeekdays) =>
-          updateSettings((current) => ({
-            ...current,
-            enabledWeekdays,
-          }))
-        }
-      />
+      <WeekdaySettings
+  description="通常授業を実施する曜日を選択してください。"
+  value={settings.enabledWeekdays}
+  onChange={(enabledWeekdays) =>
+    updateSettings((current) => ({
+      ...current,
+      enabledWeekdays,
+    }))
+  }
+/>
 
-      <RegularLessonRuleSettings
-        value={settings.lessonRule}
-        onChange={(lessonRule) =>
-          updateSettings((current) => ({
-            ...current,
-            lessonRule,
-          }))
-        }
-      />
-
-      <RegularPeriodSettings
-        periods={settings.periods}
-        lessonDurationMinutes={
-          settings.lessonRule.lessonDurationMinutes
-        }
-        onChange={(periods) =>
-          updateSettings((current) => ({
-            ...current,
-            periods,
-          }))
-        }
-      />
+      <LessonRuleSettings
+  description="通常授業の授業形式と授業時間を設定します。"
+  value={settings.lessonRule}
+  onChange={(lessonRule) =>
+    updateSettings((current) => ({
+      ...current,
+      lessonRule,
+    }))
+  }
+/>
+      <PeriodSettings
+  description="開始時刻から終了時刻を自動計算します。終了時刻は手動でも変更できます。"
+  periods={settings.periods}
+  lessonDurationMinutes={
+    settings.lessonRule.lessonDurationMinutes
+  }
+  onChange={(periods) =>
+    updateSettings((current) => ({
+      ...current,
+      periods,
+    }))
+  }
+/>
 
       <div className="flex justify-end border-t border-zinc-200 pt-6">
         <PrimaryButton

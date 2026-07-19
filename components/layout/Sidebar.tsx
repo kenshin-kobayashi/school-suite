@@ -25,7 +25,7 @@ const menus = [
   },
   {
     title: "スケジュール",
-    href: "/scheduler",
+    href: "/schedule",
     icon: CalendarDays,
   },
   {
