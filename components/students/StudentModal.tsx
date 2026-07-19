@@ -1,6 +1,9 @@
 "use client";
 
-import { Student } from "@/lib/firebase/students";
+import Modal from "@/components/common/Modal";
+
+import type { Student } from "@/lib/firebase/students";
+
 import StudentForm from "./StudentForm";
 
 type Props = {
@@ -14,16 +17,20 @@ export default function StudentModal({
   onClose,
   student,
 }: Props) {
-  if (!open) return null;
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-lg rounded-3xl bg-white p-8 shadow-xl">
-        <StudentForm
-          student={student}
-          onClose={onClose}
-        />
-      </div>
-    </div>
+    <Modal
+      open={open}
+      title={
+        student
+          ? "生徒情報を編集"
+          : "生徒を登録"
+      }
+      onClose={onClose}
+    >
+      <StudentForm
+        student={student}
+        onClose={onClose}
+      />
+    </Modal>
   );
 }
