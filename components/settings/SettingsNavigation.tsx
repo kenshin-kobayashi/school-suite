@@ -7,25 +7,32 @@ type Props = {
   onSelect: (menu: SettingsMenu) => void;
 };
 
-const menus: {
+type SettingsNavigationItem = {
   id: SettingsMenu;
   label: string;
-}[] = [
+  description: string;
+};
+
+const menus: SettingsNavigationItem[] = [
   {
     id: "regular",
     label: "通常授業設定",
+    description: "曜日・授業ルール・時限",
   },
   {
     id: "courses",
     label: "講習設定",
+    description: "春期・夏期・冬期講習",
   },
   {
     id: "classrooms",
     label: "教室設定",
+    description: "授業で使用する教室",
   },
   {
     id: "academic-year",
     label: "年度更新",
+    description: "新年度への更新処理",
   },
 ];
 
@@ -34,8 +41,17 @@ export default function SettingsNavigation({
   onSelect,
 }: Props) {
   return (
-    <Card className="h-fit p-2">
-      <nav className="space-y-1">
+    <Card className="h-fit p-3">
+      <div className="px-3 pb-3 pt-2">
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-400">
+          Settings
+        </p>
+      </div>
+
+      <nav
+        aria-label="設定メニュー"
+        className="space-y-1"
+      >
         {menus.map((menu) => {
           const isSelected =
             selectedMenu === menu.id;
@@ -45,14 +61,31 @@ export default function SettingsNavigation({
               key={menu.id}
               type="button"
               onClick={() => onSelect(menu.id)}
+              aria-current={
+                isSelected ? "page" : undefined
+              }
               className={[
-                "flex w-full items-center rounded-lg px-4 py-3 text-left text-sm font-medium transition-colors",
+                "w-full rounded-xl px-4 py-3 text-left transition-colors",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 focus-visible:ring-offset-2",
                 isSelected
-                  ? "bg-blue-600 text-white"
-                  : "text-slate-700 hover:bg-slate-100",
+                  ? "bg-zinc-950 text-white"
+                  : "text-zinc-700 hover:bg-zinc-100 hover:text-zinc-950",
               ].join(" ")}
             >
-              {menu.label}
+              <span className="block text-sm font-semibold">
+                {menu.label}
+              </span>
+
+              <span
+                className={[
+                  "mt-1 block text-xs leading-5",
+                  isSelected
+                    ? "text-zinc-300"
+                    : "text-zinc-500",
+                ].join(" ")}
+              >
+                {menu.description}
+              </span>
             </button>
           );
         })}

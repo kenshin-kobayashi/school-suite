@@ -1,11 +1,11 @@
+import { db } from "@/lib/firebase";
+
 import {
   doc,
   getDoc,
-  serverTimestamp,
   setDoc,
 } from "firebase/firestore";
 
-import { db } from "@/lib/firebase";
 import { defaultScheduleSettings } from "@/lib/schedule/defaultScheduleSettings";
 
 import type {
@@ -14,390 +14,593 @@ import type {
   ScheduleSettings,
 } from "@/types/schedule-settings";
 
-const SETTINGS_COLLECTION = "settings";
+const scheduleSettingsDocument = doc(
+  db,
+  "settings",
+  "schedule",
+);
 
-const REGULAR_SETTINGS_DOCUMENT = "regular";
-const COURSE_SETTINGS_DOCUMENT = "courses";
-const SYSTEM_SETTINGS_DOCUMENT = "system";
-
-type SystemSettingsDocument = {
-  closedDates: string[];
-  updatedAt?: unknown;
-};
-
-function cloneDefaultSettings(): ScheduleSettings {
+/**
+ * 通常授業設定を安全に複製します。
+ */
+function cloneRegularSettings(
+  regular: RegularScheduleSettings,
+): RegularScheduleSettings {
   return {
-    ...defaultScheduleSettings,
+    ...regular,
 
-    regular: {
-      ...defaultScheduleSettings.regular,
+    enabledWeekdays: [
+      ...regular.enabledWeekdays,
+    ],
+
+    lessonRule: {
+      ...regular.lessonRule,
+    },
+
+    periods: regular.periods.map(
+      (period) => ({
+        ...period,
+      }),
+    ),
+  };
+}
+
+/**
+ * 講習設定を安全に複製します。
+ */
+function cloneCourseSettings(
+  courses: CourseScheduleSettingsMap,
+): CourseScheduleSettingsMap {
+  return {
+    spring: {
+      ...courses.spring,
 
       enabledWeekdays: [
-        ...defaultScheduleSettings.regular.enabledWeekdays,
+        ...courses.spring.enabledWeekdays,
       ],
 
       lessonRule: {
-        ...defaultScheduleSettings.regular.lessonRule,
+        ...courses.spring.lessonRule,
       },
 
-      periods:
-        defaultScheduleSettings.regular.periods.map(
+      periods: courses.spring.periods.map(
+        (period) => ({
+          ...period,
+        }),
+      ),
+    },
+
+    summer: {
+      ...courses.summer,
+
+      enabledWeekdays: [
+        ...courses.summer.enabledWeekdays,
+      ],
+
+      lessonRule: {
+        ...courses.summer.lessonRule,
+      },
+
+      periods: courses.summer.periods.map(
+        (period) => ({
+          ...period,
+        }),
+      ),
+    },
+
+    winter: {
+      ...courses.winter,
+
+      enabledWeekdays: [
+        ...courses.winter.enabledWeekdays,
+      ],
+
+      lessonRule: {
+        ...courses.winter.lessonRule,
+      },
+
+      periods: courses.winter.periods.map(
+        (period) => ({
+          ...period,
+        }),
+      ),
+    },
+
+    other: {
+      ...courses.other,
+
+      enabledWeekdays: [
+        ...courses.other.enabledWeekdays,
+      ],
+
+      lessonRule: {
+        ...courses.other.lessonRule,
+      },
+
+      periods: courses.other.periods.map(
+        (period) => ({
+          ...period,
+        }),
+      ),
+    },
+  };
+}
+
+/**
+ * スケジュール設定全体を安全に複製します。
+ */
+function cloneScheduleSettings(
+  settings: ScheduleSettings,
+): ScheduleSettings {
+  return {
+    ...settings,
+
+    regular: cloneRegularSettings(
+      settings.regular,
+    ),
+
+    courses: cloneCourseSettings(
+      settings.courses,
+    ),
+  };
+}
+
+/**
+ * Firestoreから取得した通常授業設定と、
+ * デフォルト設定を結合します。
+ */
+function mergeRegularSettings(
+  value: Partial<RegularScheduleSettings> | null,
+): RegularScheduleSettings {
+  const defaultRegular =
+    defaultScheduleSettings.regular;
+
+  if (!value) {
+    return cloneRegularSettings(
+      defaultRegular,
+    );
+  }
+
+  return {
+    ...defaultRegular,
+    ...value,
+
+    enabledWeekdays: Array.isArray(
+      value.enabledWeekdays,
+    )
+      ? [...value.enabledWeekdays]
+      : [...defaultRegular.enabledWeekdays],
+
+    lessonRule: {
+      ...defaultRegular.lessonRule,
+      ...(value.lessonRule ?? {}),
+    },
+
+    periods: Array.isArray(value.periods)
+      ? value.periods.map((period) => ({
+          ...period,
+        }))
+      : defaultRegular.periods.map(
           (period) => ({
             ...period,
           }),
         ),
-    },
-
-    courses: {
-      spring: {
-        ...defaultScheduleSettings.courses.spring,
-
-        enabledWeekdays: [
-          ...defaultScheduleSettings.courses.spring
-            .enabledWeekdays,
-        ],
-
-        lessonRule: {
-          ...defaultScheduleSettings.courses.spring.lessonRule,
-        },
-
-        periods:
-          defaultScheduleSettings.courses.spring.periods.map(
-            (period) => ({
-              ...period,
-            }),
-          ),
-      },
-
-      summer: {
-        ...defaultScheduleSettings.courses.summer,
-
-        enabledWeekdays: [
-          ...defaultScheduleSettings.courses.summer
-            .enabledWeekdays,
-        ],
-
-        lessonRule: {
-          ...defaultScheduleSettings.courses.summer.lessonRule,
-        },
-
-        periods:
-          defaultScheduleSettings.courses.summer.periods.map(
-            (period) => ({
-              ...period,
-            }),
-          ),
-      },
-
-      winter: {
-        ...defaultScheduleSettings.courses.winter,
-
-        enabledWeekdays: [
-          ...defaultScheduleSettings.courses.winter
-            .enabledWeekdays,
-        ],
-
-        lessonRule: {
-          ...defaultScheduleSettings.courses.winter.lessonRule,
-        },
-
-        periods:
-          defaultScheduleSettings.courses.winter.periods.map(
-            (period) => ({
-              ...period,
-            }),
-          ),
-      },
-
-      other: {
-        ...defaultScheduleSettings.courses.other,
-
-        enabledWeekdays: [
-          ...defaultScheduleSettings.courses.other
-            .enabledWeekdays,
-        ],
-
-        lessonRule: {
-          ...defaultScheduleSettings.courses.other.lessonRule,
-        },
-
-        periods:
-          defaultScheduleSettings.courses.other.periods.map(
-            (period) => ({
-              ...period,
-            }),
-          ),
-      },
-    },
-
-    closedDates: [
-      ...defaultScheduleSettings.closedDates,
-    ],
-  };
-}
-/**
- * 通常授業設定を取得します。
- *
- * Firestoreに設定がない場合は、
- * 初期設定を返します。
- */
-export async function getRegularScheduleSettings(): Promise<RegularScheduleSettings> {
-  const reference = doc(
-    db,
-    SETTINGS_COLLECTION,
-    REGULAR_SETTINGS_DOCUMENT,
-  );
-
-  const snapshot = await getDoc(reference);
-
-  if (!snapshot.exists()) {
-    return cloneDefaultSettings().regular;
-  }
-
-  const data =
-    snapshot.data() as Partial<RegularScheduleSettings>;
-
-  const defaults = cloneDefaultSettings().regular;
-
-  return {
-    ...defaults,
-    ...data,
-
-    enabledWeekdays:
-      data.enabledWeekdays ??
-      defaults.enabledWeekdays,
-
-    lessonRule: {
-      ...defaults.lessonRule,
-      ...data.lessonRule,
-    },
-
-    periods:
-      data.periods ??
-      defaults.periods,
   };
 }
 
 /**
- * 通常授業設定を保存します。
+ * Firestoreから取得した講習設定と、
+ * デフォルト設定を結合します。
  */
-export async function saveRegularScheduleSettings(
-  settings: RegularScheduleSettings,
-): Promise<void> {
-  const reference = doc(
-    db,
-    SETTINGS_COLLECTION,
-    REGULAR_SETTINGS_DOCUMENT,
-  );
-
-  await setDoc(
-    reference,
-    {
-      ...settings,
-      updatedAt: serverTimestamp(),
-    },
-    {
-      merge: true,
-    },
-  );
-}
-
-/**
- * 春期・夏期・冬期・その他の
- * 講習設定をまとめて取得します。
- *
- * Firestoreに設定がない場合は、
- * 初期設定を返します。
- */
-export async function getCourseScheduleSettings(): Promise<CourseScheduleSettingsMap> {
-  const reference = doc(
-    db,
-    SETTINGS_COLLECTION,
-    COURSE_SETTINGS_DOCUMENT,
-  );
-
-  const snapshot = await getDoc(reference);
-
-  if (!snapshot.exists()) {
-    return cloneDefaultSettings().courses;
-  }
-
-  const data =
-    snapshot.data() as Partial<CourseScheduleSettingsMap>;
-
-  const defaults = cloneDefaultSettings().courses;
+function mergeCourseSettings(
+  value: Partial<CourseScheduleSettingsMap> | null,
+): CourseScheduleSettingsMap {
+  const defaultCourses =
+    defaultScheduleSettings.courses;
 
   return {
     spring: {
-      ...defaults.spring,
-      ...data.spring,
+      ...defaultCourses.spring,
+      ...(value?.spring ?? {}),
 
-      enabledWeekdays:
-        data.spring?.enabledWeekdays ??
-        defaults.spring.enabledWeekdays,
+      enabledWeekdays: Array.isArray(
+        value?.spring?.enabledWeekdays,
+      )
+        ? [
+            ...value.spring.enabledWeekdays,
+          ]
+        : [
+            ...defaultCourses.spring
+              .enabledWeekdays,
+          ],
 
       lessonRule: {
-        ...defaults.spring.lessonRule,
-        ...data.spring?.lessonRule,
+        ...defaultCourses.spring.lessonRule,
+        ...(value?.spring?.lessonRule ?? {}),
       },
 
-      periods:
-        data.spring?.periods ??
-        defaults.spring.periods,
+      periods: Array.isArray(
+        value?.spring?.periods,
+      )
+        ? value.spring.periods.map(
+            (period) => ({
+              ...period,
+            }),
+          )
+        : defaultCourses.spring.periods.map(
+            (period) => ({
+              ...period,
+            }),
+          ),
     },
 
     summer: {
-      ...defaults.summer,
-      ...data.summer,
+      ...defaultCourses.summer,
+      ...(value?.summer ?? {}),
 
-      enabledWeekdays:
-        data.summer?.enabledWeekdays ??
-        defaults.summer.enabledWeekdays,
+      enabledWeekdays: Array.isArray(
+        value?.summer?.enabledWeekdays,
+      )
+        ? [
+            ...value.summer.enabledWeekdays,
+          ]
+        : [
+            ...defaultCourses.summer
+              .enabledWeekdays,
+          ],
 
       lessonRule: {
-        ...defaults.summer.lessonRule,
-        ...data.summer?.lessonRule,
+        ...defaultCourses.summer.lessonRule,
+        ...(value?.summer?.lessonRule ?? {}),
       },
 
-      periods:
-        data.summer?.periods ??
-        defaults.summer.periods,
+      periods: Array.isArray(
+        value?.summer?.periods,
+      )
+        ? value.summer.periods.map(
+            (period) => ({
+              ...period,
+            }),
+          )
+        : defaultCourses.summer.periods.map(
+            (period) => ({
+              ...period,
+            }),
+          ),
     },
 
     winter: {
-      ...defaults.winter,
-      ...data.winter,
+      ...defaultCourses.winter,
+      ...(value?.winter ?? {}),
 
-      enabledWeekdays:
-        data.winter?.enabledWeekdays ??
-        defaults.winter.enabledWeekdays,
+      enabledWeekdays: Array.isArray(
+        value?.winter?.enabledWeekdays,
+      )
+        ? [
+            ...value.winter.enabledWeekdays,
+          ]
+        : [
+            ...defaultCourses.winter
+              .enabledWeekdays,
+          ],
 
       lessonRule: {
-        ...defaults.winter.lessonRule,
-        ...data.winter?.lessonRule,
+        ...defaultCourses.winter.lessonRule,
+        ...(value?.winter?.lessonRule ?? {}),
       },
 
-      periods:
-        data.winter?.periods ??
-        defaults.winter.periods,
+      periods: Array.isArray(
+        value?.winter?.periods,
+      )
+        ? value.winter.periods.map(
+            (period) => ({
+              ...period,
+            }),
+          )
+        : defaultCourses.winter.periods.map(
+            (period) => ({
+              ...period,
+            }),
+          ),
     },
 
     other: {
-      ...defaults.other,
-      ...data.other,
+      ...defaultCourses.other,
+      ...(value?.other ?? {}),
 
-      enabledWeekdays:
-        data.other?.enabledWeekdays ??
-        defaults.other.enabledWeekdays,
+      enabledWeekdays: Array.isArray(
+        value?.other?.enabledWeekdays,
+      )
+        ? [
+            ...value.other.enabledWeekdays,
+          ]
+        : [
+            ...defaultCourses.other
+              .enabledWeekdays,
+          ],
 
       lessonRule: {
-        ...defaults.other.lessonRule,
-        ...data.other?.lessonRule,
+        ...defaultCourses.other.lessonRule,
+        ...(value?.other?.lessonRule ?? {}),
       },
 
-      periods:
-        data.other?.periods ??
-        defaults.other.periods,
+      periods: Array.isArray(
+        value?.other?.periods,
+      )
+        ? value.other.periods.map(
+            (period) => ({
+              ...period,
+            }),
+          )
+        : defaultCourses.other.periods.map(
+            (period) => ({
+              ...period,
+            }),
+          ),
     },
   };
 }
 
 /**
- * 講習設定をまとめて保存します。
- */
-export async function saveCourseScheduleSettings(
-  settings: CourseScheduleSettingsMap,
-): Promise<void> {
-  const reference = doc(
-    db,
-    SETTINGS_COLLECTION,
-    COURSE_SETTINGS_DOCUMENT,
-  );
-
-  await setDoc(
-    reference,
-    {
-      ...settings,
-      updatedAt: serverTimestamp(),
-    },
-    {
-      merge: true,
-    },
-  );
-}
-/**
- * 休塾日を取得します。
+ * Firestoreの保存値とデフォルト設定を結合します。
  *
- * 休塾日の編集画面は、後ほど
- * スケジュール画面内に作成します。
+ * 古い形式のデータで項目が不足していても、
+ * デフォルト値で補完します。
  */
-export async function getClosedDates(): Promise<string[]> {
-  const reference = doc(
-    db,
-    SETTINGS_COLLECTION,
-    SYSTEM_SETTINGS_DOCUMENT,
-  );
+function normalizeScheduleSettings(
+  value: Partial<ScheduleSettings> | null,
+): ScheduleSettings {
+  return {
+    ...defaultScheduleSettings,
+    ...(value ?? {}),
 
-  const snapshot = await getDoc(reference);
+    regular: mergeRegularSettings(
+      value?.regular ?? null,
+    ),
 
-  if (!snapshot.exists()) {
-    return cloneDefaultSettings().closedDates;
-  }
-
-  const data =
-    snapshot.data() as Partial<SystemSettingsDocument>;
-
-  return Array.isArray(data.closedDates)
-    ? data.closedDates
-    : [];
+    courses: mergeCourseSettings(
+      value?.courses ?? null,
+    ),
+  };
 }
 
 /**
- * 休塾日を保存します。
- */
-export async function saveClosedDates(
-  closedDates: string[],
-): Promise<void> {
-  const reference = doc(
-    db,
-    SETTINGS_COLLECTION,
-    SYSTEM_SETTINGS_DOCUMENT,
-  );
-
-  const uniqueClosedDates = [
-    ...new Set(closedDates),
-  ].sort();
-
-  await setDoc(
-    reference,
-    {
-      closedDates: uniqueClosedDates,
-      updatedAt: serverTimestamp(),
-    },
-    {
-      merge: true,
-    },
-  );
-}
-
-/**
- * スケジュール設定をまとめて取得します。
+ * スケジュール設定全体を取得します。
+ *
+ * Firestoreに設定が存在しない場合は、
+ * デフォルト設定を返します。
  */
 export async function getScheduleSettings(): Promise<ScheduleSettings> {
-  const [
-    regular,
-    courses,
-    closedDates,
-  ] = await Promise.all([
-    getRegularScheduleSettings(),
-    getCourseScheduleSettings(),
-    getClosedDates(),
-  ]);
+  try {
+    const snapshot = await getDoc(
+      scheduleSettingsDocument,
+    );
 
-  return {
-    id: "system",
-    regular,
-    courses,
-    closedDates,
-  };
+    if (!snapshot.exists()) {
+      return cloneScheduleSettings(
+        defaultScheduleSettings,
+      );
+    }
+
+    const data =
+      snapshot.data() as Partial<ScheduleSettings>;
+
+    return normalizeScheduleSettings(data);
+  } catch (error) {
+    console.error(
+      "スケジュール設定の取得に失敗しました。",
+      error,
+    );
+
+    throw new Error(
+      "スケジュール設定を取得できませんでした。",
+    );
+  }
+}
+
+/**
+ * スケジュール設定全体を保存します。
+ */
+export async function saveScheduleSettings(
+  settings: ScheduleSettings,
+): Promise<void> {
+  try {
+    const normalizedSettings =
+      normalizeScheduleSettings(settings);
+
+    await setDoc(
+      scheduleSettingsDocument,
+      cloneScheduleSettings(
+        normalizedSettings,
+      ),
+    );
+  } catch (error) {
+    console.error(
+      "スケジュール設定の保存に失敗しました。",
+      error,
+    );
+
+    throw new Error(
+      "スケジュール設定を保存できませんでした。",
+    );
+  }
+}
+
+/**
+ * スケジュール設定の一部を更新します。
+ *
+ * 保存済みの設定を取得してから結合するため、
+ * 未変更の設定は維持されます。
+ */
+export async function updateScheduleSettings(
+  updates: Partial<ScheduleSettings>,
+): Promise<ScheduleSettings> {
+  try {
+    const currentSettings =
+      await getScheduleSettings();
+
+    const updatedSettings =
+      normalizeScheduleSettings({
+        ...currentSettings,
+        ...updates,
+
+        regular: updates.regular
+          ? {
+              ...currentSettings.regular,
+              ...updates.regular,
+            }
+          : currentSettings.regular,
+
+        courses: updates.courses
+          ? {
+              ...currentSettings.courses,
+              ...updates.courses,
+            }
+          : currentSettings.courses,
+      });
+
+    await saveScheduleSettings(
+      updatedSettings,
+    );
+
+    return updatedSettings;
+  } catch (error) {
+    console.error(
+      "スケジュール設定の更新に失敗しました。",
+      error,
+    );
+
+    throw new Error(
+      "スケジュール設定を更新できませんでした。",
+    );
+  }
+}
+
+/**
+ * Firestoreに設定が存在しない場合のみ、
+ * デフォルト設定を保存します。
+ */
+export async function initializeScheduleSettings(): Promise<ScheduleSettings> {
+  try {
+    const snapshot = await getDoc(
+      scheduleSettingsDocument,
+    );
+
+    if (snapshot.exists()) {
+      return normalizeScheduleSettings(
+        snapshot.data() as Partial<ScheduleSettings>,
+      );
+    }
+
+    const initialSettings =
+      cloneScheduleSettings(
+        defaultScheduleSettings,
+      );
+
+    await setDoc(
+      scheduleSettingsDocument,
+      initialSettings,
+    );
+
+    return initialSettings;
+  } catch (error) {
+    console.error(
+      "スケジュール設定の初期化に失敗しました。",
+      error,
+    );
+
+    throw new Error(
+      "スケジュール設定を初期化できませんでした。",
+    );
+  }
+}
+
+/**
+ * スケジュール設定をデフォルト状態へ戻します。
+ */
+export async function resetScheduleSettings(): Promise<ScheduleSettings> {
+  try {
+    const defaultSettings =
+      cloneScheduleSettings(
+        defaultScheduleSettings,
+      );
+
+    await setDoc(
+      scheduleSettingsDocument,
+      defaultSettings,
+    );
+
+    return defaultSettings;
+  } catch (error) {
+    console.error(
+      "スケジュール設定のリセットに失敗しました。",
+      error,
+    );
+
+    throw new Error(
+      "スケジュール設定をリセットできませんでした。",
+    );
+  }
+}
+
+/**
+ * 通常授業設定だけを取得します。
+ *
+ * RegularSettings.tsxとの互換性を保つための関数です。
+ */
+export async function getRegularScheduleSettings(): Promise<RegularScheduleSettings> {
+  const settings =
+    await getScheduleSettings();
+
+  return cloneRegularSettings(
+    settings.regular,
+  );
+}
+
+/**
+ * 通常授業設定だけを保存します。
+ *
+ * 講習設定は変更されません。
+ */
+export async function saveRegularScheduleSettings(
+  regular: RegularScheduleSettings,
+): Promise<void> {
+  const currentSettings =
+    await getScheduleSettings();
+
+  await saveScheduleSettings({
+    ...currentSettings,
+    regular: cloneRegularSettings(regular),
+  });
+}
+
+/**
+ * 講習設定だけを取得します。
+ *
+ * 古いCourseSettings.tsxとの互換性を保つための関数です。
+ */
+export async function getCourseScheduleSettings(): Promise<CourseScheduleSettingsMap> {
+  const settings =
+    await getScheduleSettings();
+
+  return cloneCourseSettings(
+    settings.courses,
+  );
+}
+
+/**
+ * 講習設定だけを保存します。
+ *
+ * 通常授業設定は変更されません。
+ */
+export async function saveCourseScheduleSettings(
+  courses: CourseScheduleSettingsMap,
+): Promise<void> {
+  const currentSettings =
+    await getScheduleSettings();
+
+  await saveScheduleSettings({
+    ...currentSettings,
+    courses: cloneCourseSettings(courses),
+  });
 }

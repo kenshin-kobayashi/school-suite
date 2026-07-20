@@ -13,8 +13,8 @@ import CourseImportSettings from "@/components/settings/CourseImportSettings";
 import CourseLessonSettings from "@/components/settings/CourseLessonSettings";
 
 import {
-  getCourseScheduleSettings,
-  saveCourseScheduleSettings,
+  getScheduleSettings,
+  saveScheduleSettings,
 } from "@/lib/firebase/setting";
 
 import { defaultScheduleSettings } from "@/lib/schedule/defaultScheduleSettings";
@@ -121,6 +121,72 @@ function cloneDefaultCourses(): CourseScheduleSettingsMap {
   };
 }
 
+function cloneCourses(
+  courses: CourseScheduleSettingsMap,
+): CourseScheduleSettingsMap {
+  return {
+    spring: {
+      ...courses.spring,
+      enabledWeekdays: [
+        ...courses.spring.enabledWeekdays,
+      ],
+      lessonRule: {
+        ...courses.spring.lessonRule,
+      },
+      periods: courses.spring.periods.map(
+        (period) => ({
+          ...period,
+        }),
+      ),
+    },
+
+    summer: {
+      ...courses.summer,
+      enabledWeekdays: [
+        ...courses.summer.enabledWeekdays,
+      ],
+      lessonRule: {
+        ...courses.summer.lessonRule,
+      },
+      periods: courses.summer.periods.map(
+        (period) => ({
+          ...period,
+        }),
+      ),
+    },
+
+    winter: {
+      ...courses.winter,
+      enabledWeekdays: [
+        ...courses.winter.enabledWeekdays,
+      ],
+      lessonRule: {
+        ...courses.winter.lessonRule,
+      },
+      periods: courses.winter.periods.map(
+        (period) => ({
+          ...period,
+        }),
+      ),
+    },
+
+    other: {
+      ...courses.other,
+      enabledWeekdays: [
+        ...courses.other.enabledWeekdays,
+      ],
+      lessonRule: {
+        ...courses.other.lessonRule,
+      },
+      periods: courses.other.periods.map(
+        (period) => ({
+          ...period,
+        }),
+      ),
+    },
+  };
+}
+
 type ValidationResult =
   | {
       isValid: true;
@@ -136,6 +202,7 @@ function validateCourseSettings(
 ): ValidationResult {
   for (const courseType of COURSE_TYPES) {
     const course = courses[courseType];
+
     const courseLabel =
       COURSE_TYPE_LABELS[courseType];
 
@@ -215,7 +282,8 @@ function validateCourseSettings(
 
     const hasInvalidPeriod = course.periods.some(
       (period) =>
-        !period.startTime || !period.endTime,
+        !period.startTime.trim() ||
+        !period.endTime.trim(),
     );
 
     if (hasInvalidPeriod) {
@@ -223,6 +291,22 @@ function validateCourseSettings(
         isValid: false,
         courseType,
         message: `${courseLabel}のすべての時限に、開始時刻と終了時刻を設定してください。`,
+      };
+    }
+
+    const hasInvalidTimeOrder =
+      course.periods.some(
+        (period) =>
+          period.startTime.trim() !== "" &&
+          period.endTime.trim() !== "" &&
+          period.startTime >= period.endTime,
+      );
+
+    if (hasInvalidTimeOrder) {
+      return {
+        isValid: false,
+        courseType,
+        message: `${courseLabel}の終了時刻は、開始時刻より後に設定してください。`,
       };
     }
   }
@@ -233,8 +317,10 @@ function validateCourseSettings(
 }
 
 export default function CourseSettings() {
-  const [selectedCourseType, setSelectedCourseType] =
-    useState<CourseType>("summer");
+  const [
+    selectedCourseType,
+    setSelectedCourseType,
+  ] = useState<CourseType>("summer");
 
   const [courses, setCourses] =
     useState<CourseScheduleSettingsMap>(
@@ -259,29 +345,34 @@ export default function CourseSettings() {
   const currentCourse =
     courses[selectedCourseType];
 
-  const loadSettings = useCallback(async () => {
-    setIsLoading(true);
-    setErrorMessage(null);
+  const loadSettings =
+    useCallback(async () => {
+      setIsLoading(true);
+      setErrorMessage(null);
+      setSuccessMessage(null);
 
-    try {
-      const savedCourses =
-        await getCourseScheduleSettings();
+      try {
+        const settings =
+          await getScheduleSettings();
 
-      setCourses(savedCourses);
-      setHasChanges(false);
-    } catch (error) {
-      console.error(
-        "講習設定の取得に失敗しました。",
-        error,
-      );
+        setCourses(
+          cloneCourses(settings.courses),
+        );
 
-      setErrorMessage(
-        "講習設定を読み込めませんでした。",
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
+        setHasChanges(false);
+      } catch (error) {
+        console.error(
+          "講習設定の取得に失敗しました。",
+          error,
+        );
+
+        setErrorMessage(
+          "講習設定を読み込めませんでした。",
+        );
+      } finally {
+        setIsLoading(false);
+      }
+    }, []);
 
   useEffect(() => {
     void loadSettings();
@@ -331,7 +422,18 @@ export default function CourseSettings() {
     setSuccessMessage(null);
 
     try {
-      await saveCourseScheduleSettings(courses);
+      /*
+       * 保存直前に最新の全設定を取得し、
+       * 通常授業などの設定を消さずに
+       * coursesだけを置き換えます。
+       */
+      const currentSettings =
+        await getScheduleSettings();
+
+      await saveScheduleSettings({
+        ...currentSettings,
+        courses: cloneCourses(courses),
+      });
 
       setHasChanges(false);
 
@@ -398,7 +500,9 @@ export default function CourseSettings() {
       )}
 
       <CourseBasicSettings
-        selectedCourseType={selectedCourseType}
+        selectedCourseType={
+          selectedCourseType
+        }
         value={currentCourse}
         onCourseTypeChange={
           handleCourseTypeChange
@@ -414,7 +518,8 @@ export default function CourseSettings() {
 
       <CourseImportSettings
         value={
-          currentCourse.shouldImportRegularLessons
+          currentCourse
+            .shouldImportRegularLessons
         }
         onChange={(
           shouldImportRegularLessons,
@@ -430,7 +535,9 @@ export default function CourseSettings() {
         <PrimaryButton
           type="button"
           onClick={() => void handleSave()}
-          disabled={isSaving || !hasChanges}
+          disabled={
+            isSaving || !hasChanges
+          }
         >
           {isSaving
             ? "保存中..."

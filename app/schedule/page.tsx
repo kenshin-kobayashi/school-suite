@@ -6,6 +6,7 @@ import {
   useState,
 } from "react";
 
+import Select from "@/components/common/Select";
 import {
   ScheduleGrid,
   ScheduleHeader,
@@ -14,15 +15,16 @@ import {
   type ScheduleColumn,
   type ScheduleMode,
 } from "@/components/schedule";
-
-import Select from "@/components/common/Select";
 import LessonDialog from "@/components/schedule/dialog/LessonDialog";
 import type { LessonFormValues } from "@/components/schedule/dialog/LessonForm";
 import CourseWeekSelect from "@/components/schedule/layout/CourseWeekSelect";
 
+import {
+  calculateAcademicYear,
+  getAcademicYear,
+} from "@/lib/firebase/academicYear";
 import type { Student } from "@/lib/firebase/students";
 import type { Teacher } from "@/lib/firebase/teachers";
-
 import { defaultScheduleSettings } from "@/lib/schedule/defaultScheduleSettings";
 import { createSchedulePeriods } from "@/lib/schedule/periods";
 import { createCourseWeeks } from "@/lib/schedule/week";
@@ -30,9 +32,9 @@ import { createCourseWeeks } from "@/lib/schedule/week";
 import type { Lesson } from "@/types/lesson";
 import type { Weekday } from "@/types/schedule";
 import type { ScheduleCellPosition } from "@/types/schedule-cell";
-import type { CourseType } from "@/types/schedule-settings";
 import {
   COURSE_TYPE_LABELS,
+  type CourseType,
 } from "@/types/schedule-settings";
 
 const weekdayLabels: Record<Weekday, string> = {
@@ -242,11 +244,7 @@ function parseDate(dateString: string): Date {
     .split("-")
     .map(Number);
 
-  return new Date(
-    year,
-    month - 1,
-    day,
-  );
+  return new Date(year, month - 1, day);
 }
 
 function createDateLabel(
@@ -263,7 +261,6 @@ function createDateSubLabel(
   dateString: string,
 ): string {
   const date = parseDate(dateString);
-
   const weekday =
     weekdayByDayNumber[date.getDay()];
 
@@ -279,167 +276,189 @@ function createRegularColumns(): ScheduleColumn[] {
   );
 }
 
-const sampleLessons: Record<string, Lesson[]> = {
-  "monday-period-1": [
-    {
-      id: "lesson-1",
-      scheduleMode: "regular",
-      weekday: "monday",
-      periodNumber: 1,
-      teacherId: "teacher-1",
-      teacherNumber: "T0001",
-      teacherName: "田中先生",
-      students: [
-        {
-          studentId: "student-1",
-          studentNumber: "S0001",
-          studentName: "佐藤 花子",
-          grade: "中学1年",
-          subject: "英語",
-        },
-        {
-          studentId: "student-2",
-          studentNumber: "S0002",
-          studentName: "鈴木 太郎",
-          grade: "中学2年",
-          subject: "数学",
-        },
-      ],
-      status: "scheduled",
-      source: "manual",
-    },
-    {
-      id: "lesson-2",
-      scheduleMode: "regular",
-      weekday: "monday",
-      periodNumber: 1,
-      teacherId: "teacher-2",
-      teacherNumber: "T0002",
-      teacherName: "山田先生",
-      students: [
-        {
-          studentId: "student-3",
-          studentNumber: "S0003",
-          studentName: "伊藤 健",
-          grade: "中学3年",
-          subject: "国語",
-        },
-      ],
-      status: "scheduled",
-      source: "manual",
-    },
-  ],
+function createSampleLessons(
+  academicYear: number,
+): Record<string, Lesson[]> {
+  return {
+    "monday-period-1": [
+      {
+        id: "lesson-1",
+        academicYear,
+        scheduleMode: "regular",
+        weekday: "monday",
+        periodNumber: 1,
+        teacherId: "teacher-1",
+        teacherNumber: "T0001",
+        teacherName: "田中先生",
+        students: [
+          {
+            studentId: "student-1",
+            studentNumber: "S0001",
+            studentName: "佐藤 花子",
+            grade: "中学1年",
+            subject: "英語",
+          },
+          {
+            studentId: "student-2",
+            studentNumber: "S0002",
+            studentName: "鈴木 太郎",
+            grade: "中学2年",
+            subject: "数学",
+          },
+        ],
+        status: "scheduled",
+        source: "manual",
+      },
+      {
+        id: "lesson-2",
+        academicYear,
+        scheduleMode: "regular",
+        weekday: "monday",
+        periodNumber: 1,
+        teacherId: "teacher-2",
+        teacherNumber: "T0002",
+        teacherName: "山田先生",
+        students: [
+          {
+            studentId: "student-3",
+            studentNumber: "S0003",
+            studentName: "伊藤 健",
+            grade: "中学3年",
+            subject: "国語",
+          },
+        ],
+        status: "scheduled",
+        source: "manual",
+      },
+    ],
 
-  "wednesday-period-2": [
-    {
-      id: "lesson-3",
-      scheduleMode: "regular",
-      weekday: "wednesday",
-      periodNumber: 2,
-      teacherId: "teacher-3",
-      teacherNumber: "T0003",
-      teacherName: "高橋先生",
-      students: [
-        {
-          studentId: "student-4",
-          studentNumber: "S0004",
-          studentName: "中村 美咲",
-          grade: "中学2年",
-          subject: "英語",
-        },
-        {
-          studentId: "student-5",
-          studentNumber: "S0005",
-          studentName: "小林 翔",
-          grade: "中学1年",
-          subject: "理科",
-        },
-      ],
-      status: "scheduled",
-      source: "manual",
-    },
-  ],
+    "wednesday-period-2": [
+      {
+        id: "lesson-3",
+        academicYear,
+        scheduleMode: "regular",
+        weekday: "wednesday",
+        periodNumber: 2,
+        teacherId: "teacher-3",
+        teacherNumber: "T0003",
+        teacherName: "高橋先生",
+        students: [
+          {
+            studentId: "student-4",
+            studentNumber: "S0004",
+            studentName: "中村 美咲",
+            grade: "中学2年",
+            subject: "英語",
+          },
+          {
+            studentId: "student-5",
+            studentNumber: "S0005",
+            studentName: "小林 翔",
+            grade: "中学1年",
+            subject: "理科",
+          },
+        ],
+        status: "scheduled",
+        source: "manual",
+      },
+    ],
 
-  "friday-period-4": [
-    {
-      id: "lesson-4",
-      scheduleMode: "regular",
-      weekday: "friday",
-      periodNumber: 4,
-      teacherId: "teacher-4",
-      teacherNumber: "T0004",
-      teacherName: "佐々木先生",
-      students: [
-        {
-          studentId: "student-6",
-          studentNumber: "S0006",
-          studentName: "加藤 悠斗",
-          grade: "中学3年",
-          subject: "数学",
-        },
-      ],
-      status: "scheduled",
-      source: "manual",
-    },
-  ],
+    "friday-period-4": [
+      {
+        id: "lesson-4",
+        academicYear,
+        scheduleMode: "regular",
+        weekday: "friday",
+        periodNumber: 4,
+        teacherId: "teacher-4",
+        teacherNumber: "T0004",
+        teacherName: "佐々木先生",
+        students: [
+          {
+            studentId: "student-6",
+            studentNumber: "S0006",
+            studentName: "加藤 悠斗",
+            grade: "中学3年",
+            subject: "数学",
+          },
+        ],
+        status: "scheduled",
+        source: "manual",
+      },
+    ],
 
-  "2026-07-21-period-1": [
-    {
-      id: "course-lesson-1",
-      scheduleMode: "course",
-      date: "2026-07-21",
-      periodNumber: 1,
-      teacherId: "teacher-1",
-      teacherNumber: "T0001",
-      teacherName: "田中先生",
-      students: [
-        {
-          studentId: "student-1",
-          studentNumber: "S0001",
-          studentName: "佐藤 花子",
-          grade: "中学1年",
-          subject: "英語",
-        },
-      ],
-      status: "scheduled",
-      source: "manual",
-    },
-  ],
+    "2026-07-21-period-1": [
+      {
+        id: "course-lesson-1",
+        academicYear,
+        scheduleMode: "course",
+        date: "2026-07-21",
+        periodNumber: 1,
+        teacherId: "teacher-1",
+        teacherNumber: "T0001",
+        teacherName: "田中先生",
+        students: [
+          {
+            studentId: "student-1",
+            studentNumber: "S0001",
+            studentName: "佐藤 花子",
+            grade: "中学1年",
+            subject: "英語",
+          },
+        ],
+        status: "scheduled",
+        source: "manual",
+      },
+    ],
 
-  "2026-07-23-period-3": [
-    {
-      id: "course-lesson-2",
-      scheduleMode: "course",
-      date: "2026-07-23",
-      periodNumber: 3,
-      teacherId: "teacher-2",
-      teacherNumber: "T0002",
-      teacherName: "山田先生",
-      students: [
-        {
-          studentId: "student-2",
-          studentNumber: "S0002",
-          studentName: "鈴木 太郎",
-          grade: "中学2年",
-          subject: "数学",
-        },
-        {
-          studentId: "student-3",
-          studentNumber: "S0003",
-          studentName: "伊藤 健",
-          grade: "中学3年",
-          subject: "国語",
-        },
-      ],
-      status: "scheduled",
-      source: "manual",
-    },
-  ],
-};
+    "2026-07-23-period-3": [
+      {
+        id: "course-lesson-2",
+        academicYear,
+        scheduleMode: "course",
+        date: "2026-07-23",
+        periodNumber: 3,
+        teacherId: "teacher-2",
+        teacherNumber: "T0002",
+        teacherName: "山田先生",
+        students: [
+          {
+            studentId: "student-2",
+            studentNumber: "S0002",
+            studentName: "鈴木 太郎",
+            grade: "中学2年",
+            subject: "数学",
+          },
+          {
+            studentId: "student-3",
+            studentNumber: "S0003",
+            studentName: "伊藤 健",
+            grade: "中学3年",
+            subject: "国語",
+          },
+        ],
+        status: "scheduled",
+        source: "manual",
+      },
+    ],
+  };
+}
 
 export default function SchedulePage() {
   const [mode, setMode] =
     useState<ScheduleMode>("regular");
+
+  const [
+    academicYear,
+    setAcademicYear,
+  ] = useState(() =>
+    calculateAcademicYear(),
+  );
+
+  const [
+    isAcademicYearLoading,
+    setIsAcademicYearLoading,
+  ] = useState(true);
 
   const [
     selectedCourseType,
@@ -464,6 +483,36 @@ export default function SchedulePage() {
     setSelectedWeekId,
   ] = useState("");
 
+  useEffect(() => {
+    let active = true;
+
+    async function loadAcademicYear() {
+      try {
+        const savedAcademicYear =
+          await getAcademicYear();
+
+        if (active) {
+          setAcademicYear(savedAcademicYear);
+        }
+      } catch (error) {
+        console.error(
+          "年度の読み込みに失敗しました。",
+          error,
+        );
+      } finally {
+        if (active) {
+          setIsAcademicYearLoading(false);
+        }
+      }
+    }
+
+    void loadAcademicYear();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const selectedCourseSettings =
     useMemo(
       () =>
@@ -476,6 +525,11 @@ export default function SchedulePage() {
   const regularColumns = useMemo(
     () => createRegularColumns(),
     [],
+  );
+
+  const sampleLessons = useMemo(
+    () => createSampleLessons(academicYear),
+    [academicYear],
   );
 
   const courseWeeks = useMemo(() => {
@@ -510,10 +564,7 @@ export default function SchedulePage() {
       ) ??
       courseWeeks[0] ??
       null,
-    [
-      courseWeeks,
-      selectedWeekId,
-    ],
+    [courseWeeks, selectedWeekId],
   );
 
   const courseColumns =
@@ -527,9 +578,7 @@ export default function SchedulePage() {
           (dateString) => ({
             id: dateString,
             label:
-              createDateLabel(
-                dateString,
-              ),
+              createDateLabel(dateString),
             subLabel:
               createDateSubLabel(
                 dateString,
@@ -567,39 +616,38 @@ export default function SchedulePage() {
     selectedCourseSettings,
   ]);
 
-  const handleModeChange = (
+  function handleModeChange(
     nextMode: ScheduleMode,
-  ) => {
+  ) {
     setMode(nextMode);
     setSelectedCell(null);
     setDialogOpen(false);
-  };
+  }
 
-  const handleCourseTypeChange = (
+  function handleCourseTypeChange(
     value: string,
-  ) => {
+  ) {
     setSelectedCourseType(
       value as CourseType,
     );
 
     setSelectedCell(null);
     setDialogOpen(false);
-  };
+  }
 
-  const handleCellClick = (
+  function handleCellClick(
     position: ScheduleCellPosition,
-  ) => {
+  ) {
     setSelectedCell(position);
     setDialogOpen(true);
-  };
+  }
 
-  const handleCloseLessonDialog =
-    () => {
-      setDialogOpen(false);
-      setSelectedCell(null);
-    };
+  function handleCloseLessonDialog() {
+    setDialogOpen(false);
+    setSelectedCell(null);
+  }
 
-  const handleAddLesson = () => {
+  function handleAddLesson() {
     const firstColumn = columns[0];
     const firstPeriod = periods[0];
 
@@ -613,16 +661,17 @@ export default function SchedulePage() {
     });
 
     setDialogOpen(true);
-  };
+  }
 
-  const handleSubmitLesson = async (
+  async function handleSubmitLesson(
     values: LessonFormValues,
-  ) => {
+  ) {
     if (!selectedCell) {
       return;
     }
 
     console.log("授業登録", {
+      academicYear,
       scheduleMode: mode,
       courseType:
         mode === "course"
@@ -633,46 +682,60 @@ export default function SchedulePage() {
     });
 
     handleCloseLessonDialog();
-  };
+  }
 
-  const handleCreateOrRebuildWithAI =
-    () => {
-      console.log(
-        "AIで作成・組み直し",
-        {
-          scheduleMode: mode,
-          courseType:
-            mode === "course"
-              ? selectedCourseType
-              : undefined,
-        },
-      );
-    };
-
-  const handleOpenSettings = () => {
-    console.log("日程設定", {
+  function handleCreateOrRebuildWithAI() {
+    console.log("AIで作成・組み直し", {
+      academicYear,
       scheduleMode: mode,
       courseType:
         mode === "course"
           ? selectedCourseType
           : undefined,
     });
-  };
+  }
+
+  function handleOpenSettings() {
+    console.log("日程設定", {
+      academicYear,
+      scheduleMode: mode,
+      courseType:
+        mode === "course"
+          ? selectedCourseType
+          : undefined,
+    });
+  }
+
+  if (isAcademicYearLoading) {
+    return (
+      <main className="min-w-0">
+        <div className="mx-auto w-full max-w-[1800px]">
+          <div className="rounded-3xl border border-zinc-200 bg-white px-6 py-16 text-center shadow-sm">
+            <p className="text-sm font-medium text-zinc-600">
+              スケジュールを読み込んでいます...
+            </p>
+          </div>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <>
       <main className="min-w-0">
         <div className="mx-auto w-full max-w-[1800px] space-y-6">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-            <ScheduleHeader
-              mode={mode}
-            />
+            <div>
+              <ScheduleHeader mode={mode} />
+
+              <p className="mt-2 text-sm font-medium text-zinc-500">
+                {academicYear}年度
+              </p>
+            </div>
 
             <ScheduleModeToggle
               value={mode}
-              onChange={
-                handleModeChange
-              }
+              onChange={handleModeChange}
             />
           </div>
 

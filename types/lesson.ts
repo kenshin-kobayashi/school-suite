@@ -35,17 +35,31 @@ export type Lesson = {
   id?: string;
 
   /**
-   * セルの位置情報。
+   * この授業が属する年度です。
    *
+   * 例：2026年度の場合は2026です。
+   */
+  academicYear: number;
+
+  /**
+   * セルの位置情報です。
+   *
+   * 通常授業の例：
    * {
    *   columnId: "monday",
+   *   periodId: "period-1"
+   * }
+   *
+   * 講習授業の例：
+   * {
+   *   columnId: "2026-07-21",
    *   periodId: "period-1"
    * }
    */
   position?: ScheduleCellPosition;
 
   /**
-   * 通常授業または講習授業。
+   * 通常授業または講習授業です。
    */
   scheduleMode: LessonScheduleMode;
 
@@ -69,7 +83,7 @@ export type Lesson = {
   teacherId: string;
 
   /**
-   * 既存のサンプルデータに入っていないため
+   * 既存のサンプルデータに入っていないため、
    * 一覧表示用のLessonでは任意にしています。
    */
   teacherNumber?: string;
@@ -88,10 +102,18 @@ export type Lesson = {
 /**
  * Firestoreへ授業を新規保存するときのデータです。
  *
- * 新しく登録する授業では、positionとteacherNumberを
+ * 新しく登録する授業では、
+ * academicYear、position、teacherNumberを
  * 必須にしています。
  */
 export type LessonWriteData = {
+  /**
+   * この授業が属する年度です。
+   *
+   * 例：2026年度の場合は2026です。
+   */
+  academicYear: number;
+
   position: ScheduleCellPosition;
 
   scheduleMode: LessonScheduleMode;
