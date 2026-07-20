@@ -6,6 +6,7 @@ import PageHeader from "@/components/common/PageHeader";
 
 import CourseSettings from "./CourseSettings";
 import RegularSettings from "./RegularSettings";
+import ClassroomSettings from "./ClassroomSettings";
 
 export type SettingsMenu =
   | "regular"
@@ -137,12 +138,9 @@ export default function SettingsPage() {
   <CourseSettings />
 )}
 
-          {selectedMenu === "classrooms" && (
-            <ComingSoon
-              title="教室設定"
-              description="教室名や利用可能な座席などを管理する画面です。"
-            />
-          )}
+         {selectedMenu === "classrooms" && (
+  <ClassroomSettings />
+)}
 
           {selectedMenu === "academic-year" && (
             <ComingSoon
