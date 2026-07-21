@@ -59,7 +59,9 @@ function getExistingLessonCount(
   input: AISchedulerInput,
   request: AISchedulerStudentRequest,
 ): number {
-  if (!input.options.preserveExistingLessons) {
+  if (
+    !input.options.preserveExistingLessons
+  ) {
     return 0;
   }
 
@@ -69,8 +71,10 @@ function getExistingLessonCount(
       lesson.status !== "cancelled" &&
       lesson.students.some(
         (student) =>
-          student.studentId === request.studentId &&
-          student.subject === request.subject,
+          student.studentId ===
+            request.studentId &&
+          student.subject ===
+            request.subject,
       ),
   ).length;
 }
@@ -152,6 +156,58 @@ function candidateToLesson(
   };
 }
 
+function isSameScheduledLesson(
+  lesson: Lesson,
+  candidate: AISchedulerCandidate,
+): boolean {
+  return (
+    lesson.scheduleMode === "course" &&
+    lesson.status !== "cancelled" &&
+    lesson.date === candidate.date &&
+    lesson.periodNumber ===
+      candidate.periodNumber &&
+    lesson.teacherId ===
+      candidate.teacherId &&
+    lesson.classroomId ===
+      candidate.classroomId
+  );
+}
+
+function applyCandidateToLessons(
+  scheduledLessons: Lesson[],
+  candidate: AISchedulerCandidate,
+  input: AISchedulerInput,
+): Lesson[] {
+  const nextLesson =
+    candidateToLesson(
+      candidate,
+      input,
+    );
+
+  const existingLessonIndex =
+    scheduledLessons.findIndex(
+      (lesson) =>
+        isSameScheduledLesson(
+          lesson,
+          candidate,
+        ),
+    );
+
+  if (existingLessonIndex === -1) {
+    return [
+      ...scheduledLessons,
+      nextLesson,
+    ];
+  }
+
+  return scheduledLessons.map(
+    (lesson, index) =>
+      index === existingLessonIndex
+        ? nextLesson
+        : lesson,
+  );
+}
+
 function getUnassignedReason(
   reasons: AISchedulerUnassignedReason[],
 ): AISchedulerUnassignedReason {
@@ -197,11 +253,33 @@ function createCandidateSet(
 
   const validCandidates =
     generationResult.candidates.filter(
-      (candidate) =>
-        validateCandidate(candidate, {
-          input,
-          scheduledLessons,
-        }).valid,
+      (candidate) => {
+        const mergeTarget =
+          scheduledLessons.find(
+            (lesson) =>
+              isSameScheduledLesson(
+                lesson,
+                candidate,
+              ),
+          );
+
+        const lessonsForValidation =
+          mergeTarget
+            ? scheduledLessons.filter(
+                (lesson) =>
+                  lesson !== mergeTarget,
+              )
+            : scheduledLessons;
+
+        return validateCandidate(
+          candidate,
+          {
+            input,
+            scheduledLessons:
+              lessonsForValidation,
+          },
+        ).valid;
+      },
     );
 
   return {
@@ -238,8 +316,7 @@ function compareCandidateSets(
       .totalScore ?? 0;
 
   if (
-    highestScoreA !==
-    highestScoreB
+    highestScoreA !== highestScoreB
   ) {
     return (
       highestScoreB -
@@ -386,13 +463,12 @@ function expandState(
         state.tasks,
         selectedSet.task.request.id,
       ),
-      scheduledLessons: [
-        ...state.scheduledLessons,
-        candidateToLesson(
+      scheduledLessons:
+        applyCandidateToLessons(
+          state.scheduledLessons,
           candidate,
           input,
         ),
-      ],
       selectedCandidates: [
         ...state.selectedCandidates,
         candidate,
@@ -819,11 +895,18 @@ export function optimizeSchedule(
       input,
     );
 
+  /*
+   * scheduledLessons.length ではなく、
+   * 配置した生徒コマ数を数えます。
+   *
+   * 1対2の場合、授業データは1件でも
+   * 配置済みコマ数は2件になります。
+   */
   const assignedLessonCount =
     Math.min(
       requestedLessonCount,
       preservedLessonCount +
-        bestState.scheduledLessons.length,
+        bestState.selectedCandidates.length,
     );
 
   const placementRate =

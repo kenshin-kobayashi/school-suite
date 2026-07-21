@@ -32,169 +32,92 @@ const COURSE_TYPES: CourseType[] = [
   "other",
 ];
 
-function cloneDefaultCourses(): CourseScheduleSettingsMap {
+/**
+ * 講習設定を1件だけ安全に複製します。
+ */
+function cloneSingleCourse(
+  course: CourseScheduleSettings,
+): CourseScheduleSettings {
   return {
-    spring: {
-      ...defaultScheduleSettings.courses.spring,
+    ...course,
 
-      enabledWeekdays: [
-        ...defaultScheduleSettings.courses.spring
-          .enabledWeekdays,
-      ],
+    enabledWeekdays: [
+      ...course.enabledWeekdays,
+    ],
 
-      lessonRule: {
-        ...defaultScheduleSettings.courses.spring
-          .lessonRule,
-      },
-
-      periods:
-        defaultScheduleSettings.courses.spring.periods.map(
-          (period) => ({
-            ...period,
-          }),
-        ),
+    lessonRule: {
+      ...course.lessonRule,
     },
 
-    summer: {
-      ...defaultScheduleSettings.courses.summer,
-
-      enabledWeekdays: [
-        ...defaultScheduleSettings.courses.summer
-          .enabledWeekdays,
-      ],
-
-      lessonRule: {
-        ...defaultScheduleSettings.courses.summer
-          .lessonRule,
-      },
-
-      periods:
-        defaultScheduleSettings.courses.summer.periods.map(
-          (period) => ({
-            ...period,
-          }),
-        ),
+    aiWeights: {
+      ...course.aiWeights,
     },
 
-    winter: {
-      ...defaultScheduleSettings.courses.winter,
-
-      enabledWeekdays: [
-        ...defaultScheduleSettings.courses.winter
-          .enabledWeekdays,
-      ],
-
-      lessonRule: {
-        ...defaultScheduleSettings.courses.winter
-          .lessonRule,
-      },
-
-      periods:
-        defaultScheduleSettings.courses.winter.periods.map(
-          (period) => ({
-            ...period,
-          }),
-        ),
-    },
-
-    other: {
-      ...defaultScheduleSettings.courses.other,
-
-      enabledWeekdays: [
-        ...defaultScheduleSettings.courses.other
-          .enabledWeekdays,
-      ],
-
-      lessonRule: {
-        ...defaultScheduleSettings.courses.other
-          .lessonRule,
-      },
-
-      periods:
-        defaultScheduleSettings.courses.other.periods.map(
-          (period) => ({
-            ...period,
-          }),
-        ),
-    },
+    periods: course.periods.map(
+      (period) => ({
+        ...period,
+      }),
+    ),
   };
 }
 
+/**
+ * デフォルトの講習設定を安全に複製します。
+ */
+function cloneDefaultCourses(): CourseScheduleSettingsMap {
+  return {
+    spring:
+      cloneSingleCourse(
+        defaultScheduleSettings
+          .courses.spring,
+      ),
+
+    summer:
+      cloneSingleCourse(
+        defaultScheduleSettings
+          .courses.summer,
+      ),
+
+    winter:
+      cloneSingleCourse(
+        defaultScheduleSettings
+          .courses.winter,
+      ),
+
+    other:
+      cloneSingleCourse(
+        defaultScheduleSettings
+          .courses.other,
+      ),
+  };
+}
+
+/**
+ * 講習設定全体を安全に複製します。
+ */
 function cloneCourses(
   courses: CourseScheduleSettingsMap,
 ): CourseScheduleSettingsMap {
   return {
-    spring: {
-      ...courses.spring,
-
-      enabledWeekdays: [
-        ...courses.spring.enabledWeekdays,
-      ],
-
-      lessonRule: {
-        ...courses.spring.lessonRule,
-      },
-
-      periods: courses.spring.periods.map(
-        (period) => ({
-          ...period,
-        }),
+    spring:
+      cloneSingleCourse(
+        courses.spring,
       ),
-    },
 
-    summer: {
-      ...courses.summer,
-
-      enabledWeekdays: [
-        ...courses.summer.enabledWeekdays,
-      ],
-
-      lessonRule: {
-        ...courses.summer.lessonRule,
-      },
-
-      periods: courses.summer.periods.map(
-        (period) => ({
-          ...period,
-        }),
+    summer:
+      cloneSingleCourse(
+        courses.summer,
       ),
-    },
 
-    winter: {
-      ...courses.winter,
-
-      enabledWeekdays: [
-        ...courses.winter.enabledWeekdays,
-      ],
-
-      lessonRule: {
-        ...courses.winter.lessonRule,
-      },
-
-      periods: courses.winter.periods.map(
-        (period) => ({
-          ...period,
-        }),
+    winter:
+      cloneSingleCourse(
+        courses.winter,
       ),
-    },
 
-    other: {
-      ...courses.other,
-
-      enabledWeekdays: [
-        ...courses.other.enabledWeekdays,
-      ],
-
-      lessonRule: {
-        ...courses.other.lessonRule,
-      },
-
-      periods: courses.other.periods.map(
-        (period) => ({
-          ...period,
-        }),
+    other:
+      cloneSingleCourse(
+        courses.other,
       ),
-    },
   };
 }
 
@@ -208,14 +131,81 @@ type ValidationResult =
       message: string;
     };
 
+/**
+ * AI評価設定の各項目が
+ * 0〜100の整数か確認します。
+ */
+function isValidAiWeight(
+  value: number,
+): boolean {
+  return (
+    Number.isFinite(value) &&
+    Number.isInteger(value) &&
+    value >= 0 &&
+    value <= 100
+  );
+}
+
+/**
+ * AI評価設定の合計を取得します。
+ */
+function getAiWeightTotal(
+  course: CourseScheduleSettings,
+): number {
+  return (
+    course.aiWeights.teacherGap +
+    course.aiWeights.studentGap +
+    course.aiWeights
+      .teacherPreference
+  );
+}
+
+/**
+ * 全講習のAI評価設定が
+ * 保存可能な状態か確認します。
+ */
+function areAllAiWeightsValid(
+  courses: CourseScheduleSettingsMap,
+): boolean {
+  return COURSE_TYPES.every(
+    (courseType) => {
+      const course =
+        courses[courseType];
+
+      const {
+        teacherGap,
+        studentGap,
+        teacherPreference,
+      } = course.aiWeights;
+
+      return (
+        isValidAiWeight(
+          teacherGap,
+        ) &&
+        isValidAiWeight(
+          studentGap,
+        ) &&
+        isValidAiWeight(
+          teacherPreference,
+        ) &&
+        getAiWeightTotal(course) ===
+          100
+      );
+    },
+  );
+}
+
 function validateCourseSettings(
   courses: CourseScheduleSettingsMap,
 ): ValidationResult {
   for (const courseType of COURSE_TYPES) {
-    const course = courses[courseType];
+    const course =
+      courses[courseType];
 
     const courseLabel =
-      COURSE_TYPE_LABELS[courseType];
+      COURSE_TYPE_LABELS[
+        courseType
+      ];
 
     const hasStartDate =
       course.startDate.trim() !== "";
@@ -223,7 +213,9 @@ function validateCourseSettings(
     const hasEndDate =
       course.endDate.trim() !== "";
 
-    if (hasStartDate !== hasEndDate) {
+    if (
+      hasStartDate !== hasEndDate
+    ) {
       return {
         isValid: false,
         courseType,
@@ -234,7 +226,8 @@ function validateCourseSettings(
     if (
       hasStartDate &&
       hasEndDate &&
-      course.startDate > course.endDate
+      course.startDate >
+        course.endDate
     ) {
       return {
         isValid: false,
@@ -243,7 +236,10 @@ function validateCourseSettings(
       };
     }
 
-    if (course.enabledWeekdays.length === 0) {
+    if (
+      course.enabledWeekdays
+        .length === 0
+    ) {
       return {
         isValid: false,
         courseType,
@@ -252,7 +248,8 @@ function validateCourseSettings(
     }
 
     if (
-      course.lessonRule.lessonDurationMinutes < 1
+      course.lessonRule
+        .lessonDurationMinutes < 1
     ) {
       return {
         isValid: false,
@@ -262,7 +259,8 @@ function validateCourseSettings(
     }
 
     if (
-      course.lessonRule.maxStudentsPerTeacher < 1
+      course.lessonRule
+        .maxStudentsPerTeacher < 1
     ) {
       return {
         isValid: false,
@@ -271,7 +269,44 @@ function validateCourseSettings(
       };
     }
 
-    if (course.periods.length === 0) {
+    const {
+      teacherGap,
+      studentGap,
+      teacherPreference,
+    } = course.aiWeights;
+
+    if (
+      !isValidAiWeight(
+        teacherGap,
+      ) ||
+      !isValidAiWeight(
+        studentGap,
+      ) ||
+      !isValidAiWeight(
+        teacherPreference,
+      )
+    ) {
+      return {
+        isValid: false,
+        courseType,
+        message: `${courseLabel}のAI評価設定は、それぞれ0点から100点の整数で設定してください。`,
+      };
+    }
+
+    const aiWeightTotal =
+      getAiWeightTotal(course);
+
+    if (aiWeightTotal !== 100) {
+      return {
+        isValid: false,
+        courseType,
+        message: `${courseLabel}のAI評価設定の合計を100点にしてください。現在は${aiWeightTotal}点です。`,
+      };
+    }
+
+    if (
+      course.periods.length === 0
+    ) {
       return {
         isValid: false,
         courseType,
@@ -281,10 +316,13 @@ function validateCourseSettings(
 
     const enabledPeriods =
       course.periods.filter(
-        (period) => period.isEnabled,
+        (period) =>
+          period.isEnabled,
       );
 
-    if (enabledPeriods.length === 0) {
+    if (
+      enabledPeriods.length === 0
+    ) {
       return {
         isValid: false,
         courseType,
@@ -310,12 +348,17 @@ function validateCourseSettings(
     const hasInvalidTimeOrder =
       course.periods.some(
         (period) =>
-          period.startTime.trim() !== "" &&
-          period.endTime.trim() !== "" &&
-          period.startTime >= period.endTime,
+          period.startTime.trim() !==
+            "" &&
+          period.endTime.trim() !==
+            "" &&
+          period.startTime >=
+            period.endTime,
       );
 
-    if (hasInvalidTimeOrder) {
+    if (
+      hasInvalidTimeOrder
+    ) {
       return {
         isValid: false,
         courseType,
@@ -333,30 +376,54 @@ export default function CourseSettings() {
   const [
     selectedCourseType,
     setSelectedCourseType,
-  ] = useState<CourseType>("summer");
+  ] =
+    useState<CourseType>(
+      "summer",
+    );
 
   const [courses, setCourses] =
     useState<CourseScheduleSettingsMap>(
       cloneDefaultCourses,
     );
 
-  const [isLoading, setIsLoading] =
-    useState(true);
+  const [
+    isLoading,
+    setIsLoading,
+  ] = useState(true);
 
-  const [isSaving, setIsSaving] =
-    useState(false);
+  const [
+    isSaving,
+    setIsSaving,
+  ] = useState(false);
 
-  const [hasChanges, setHasChanges] =
-    useState(false);
+  const [
+    hasChanges,
+    setHasChanges,
+  ] = useState(false);
 
-  const [errorMessage, setErrorMessage] =
-    useState<string | null>(null);
+  const [
+    errorMessage,
+    setErrorMessage,
+  ] =
+    useState<string | null>(
+      null,
+    );
 
-  const [successMessage, setSuccessMessage] =
-    useState<string | null>(null);
+  const [
+    successMessage,
+    setSuccessMessage,
+  ] =
+    useState<string | null>(
+      null,
+    );
 
   const currentCourse =
     courses[selectedCourseType];
+
+  const allAiWeightsValid =
+    areAllAiWeightsValid(
+      courses,
+    );
 
   const loadSettings =
     useCallback(async () => {
@@ -369,7 +436,9 @@ export default function CourseSettings() {
           await getScheduleSettings();
 
         setCourses(
-          cloneCourses(settings.courses),
+          cloneCourses(
+            settings.courses,
+          ),
         );
 
         setHasChanges(false);
@@ -394,10 +463,16 @@ export default function CourseSettings() {
   function updateCurrentCourse(
     updatedCourse: CourseScheduleSettings,
   ) {
-    setCourses((currentCourses) => ({
-      ...currentCourses,
-      [selectedCourseType]: updatedCourse,
-    }));
+    setCourses(
+      (currentCourses) => ({
+        ...currentCourses,
+
+        [selectedCourseType]:
+          cloneSingleCourse(
+            updatedCourse,
+          ),
+      }),
+    );
 
     setHasChanges(true);
     setErrorMessage(null);
@@ -407,18 +482,26 @@ export default function CourseSettings() {
   function handleCourseTypeChange(
     courseType: CourseType,
   ) {
-    setSelectedCourseType(courseType);
+    setSelectedCourseType(
+      courseType,
+    );
+
     setErrorMessage(null);
     setSuccessMessage(null);
   }
 
   async function handleSave() {
     const validationResult =
-      validateCourseSettings(courses);
+      validateCourseSettings(
+        courses,
+      );
 
-    if (!validationResult.isValid) {
+    if (
+      !validationResult.isValid
+    ) {
       setSelectedCourseType(
-        validationResult.courseType,
+        validationResult
+          .courseType,
       );
 
       setErrorMessage(
@@ -517,21 +600,31 @@ export default function CourseSettings() {
         onCourseTypeChange={
           handleCourseTypeChange
         }
-        onChange={updateCurrentCourse}
+        onChange={
+          updateCurrentCourse
+        }
       />
 
       <CourseLessonSettings
-        courseType={selectedCourseType}
+        courseType={
+          selectedCourseType
+        }
         value={currentCourse}
-        onChange={updateCurrentCourse}
+        onChange={
+          updateCurrentCourse
+        }
       />
 
       <div className="flex justify-end border-t border-zinc-200 pt-6">
         <PrimaryButton
           type="button"
-          onClick={() => void handleSave()}
+          onClick={() =>
+            void handleSave()
+          }
           disabled={
-            isSaving || !hasChanges
+            isSaving ||
+            !hasChanges ||
+            !allAiWeightsValid
           }
         >
           {isSaving

@@ -9,6 +9,8 @@ import {
 import { defaultScheduleSettings } from "@/lib/schedule/defaultScheduleSettings";
 
 import type {
+  AiScheduleWeights,
+  CourseScheduleSettings,
   CourseScheduleSettingsMap,
   RegularScheduleSettings,
   ScheduleSettings,
@@ -25,8 +27,37 @@ const scheduleSettingsDocument = doc(
  * Firestoreに残っている可能性がある
  * 以前のスケジュール設定形式です。
  */
+type LegacyCourseScheduleSettings =
+  Partial<
+    Omit<
+      CourseScheduleSettings,
+      "aiWeights"
+    >
+  > & {
+    aiWeights?: Partial<AiScheduleWeights>;
+  };
+
+type LegacyCourseScheduleSettingsMap =
+  Partial<
+    Record<
+      keyof CourseScheduleSettingsMap,
+      LegacyCourseScheduleSettings
+    >
+  >;
+
 type LegacyScheduleSettings =
-  Partial<ScheduleSettings> & {
+  Partial<
+    Omit<
+      ScheduleSettings,
+      "courses"
+    >
+  > & {
+    /**
+     * 以前保存された講習設定です。
+     */
+    courses?:
+      LegacyCourseScheduleSettingsMap;
+
     /**
      * 以前使用していた休塾日の形式
      */
@@ -59,83 +90,79 @@ function cloneRegularSettings(
 }
 
 /**
+ * AI評価設定を安全に複製します。
+ */
+function cloneAiWeights(
+  aiWeights: AiScheduleWeights,
+): AiScheduleWeights {
+  return {
+    teacherGap:
+      aiWeights.teacherGap,
+
+    studentGap:
+      aiWeights.studentGap,
+
+    teacherPreference:
+      aiWeights.teacherPreference,
+  };
+}
+
+/**
+ * 1つの講習設定を安全に複製します。
+ */
+function cloneSingleCourseSettings(
+  course: CourseScheduleSettings,
+): CourseScheduleSettings {
+  return {
+    ...course,
+
+    enabledWeekdays: [
+      ...course.enabledWeekdays,
+    ],
+
+    lessonRule: {
+      ...course.lessonRule,
+    },
+
+    aiWeights:
+      cloneAiWeights(
+        course.aiWeights,
+      ),
+
+    periods: course.periods.map(
+      (period) => ({
+        ...period,
+      }),
+    ),
+  };
+}
+
+/**
  * 講習設定を安全に複製します。
  */
 function cloneCourseSettings(
   courses: CourseScheduleSettingsMap,
 ): CourseScheduleSettingsMap {
   return {
-    spring: {
-      ...courses.spring,
-
-      enabledWeekdays: [
-        ...courses.spring.enabledWeekdays,
-      ],
-
-      lessonRule: {
-        ...courses.spring.lessonRule,
-      },
-
-      periods: courses.spring.periods.map(
-        (period) => ({
-          ...period,
-        }),
+    spring:
+      cloneSingleCourseSettings(
+        courses.spring,
       ),
-    },
 
-    summer: {
-      ...courses.summer,
-
-      enabledWeekdays: [
-        ...courses.summer.enabledWeekdays,
-      ],
-
-      lessonRule: {
-        ...courses.summer.lessonRule,
-      },
-
-      periods: courses.summer.periods.map(
-        (period) => ({
-          ...period,
-        }),
+    summer:
+      cloneSingleCourseSettings(
+        courses.summer,
       ),
-    },
 
-    winter: {
-      ...courses.winter,
-
-      enabledWeekdays: [
-        ...courses.winter.enabledWeekdays,
-      ],
-
-      lessonRule: {
-        ...courses.winter.lessonRule,
-      },
-
-      periods: courses.winter.periods.map(
-        (period) => ({
-          ...period,
-        }),
+    winter:
+      cloneSingleCourseSettings(
+        courses.winter,
       ),
-    },
 
-    other: {
-      ...courses.other,
-
-      enabledWeekdays: [
-        ...courses.other.enabledWeekdays,
-      ],
-
-      lessonRule: {
-        ...courses.other.lessonRule,
-      },
-
-      periods: courses.other.periods.map(
-        (period) => ({
-          ...period,
-        }),
+    other:
+      cloneSingleCourseSettings(
+        courses.other,
       ),
-    },
   };
 }
 
@@ -165,13 +192,15 @@ function cloneScheduleSettings(
   return {
     ...settings,
 
-    regular: cloneRegularSettings(
-      settings.regular,
-    ),
+    regular:
+      cloneRegularSettings(
+        settings.regular,
+      ),
 
-    courses: cloneCourseSettings(
-      settings.courses,
-    ),
+    courses:
+      cloneCourseSettings(
+        settings.courses,
+      ),
 
     schoolHolidays:
       cloneSchoolHolidays(
@@ -232,25 +261,71 @@ function mergeRegularSettings(
 }
 
 /**
+ * AI評価設定の値を0〜100へ収めます。
+ */
+function normalizeAiWeight(
+  value: unknown,
+  fallback: number,
+): number {
+  if (
+    typeof value !== "number" ||
+    !Number.isFinite(value)
+  ) {
+    return fallback;
+  }
+
+  return Math.min(
+    100,
+    Math.max(
+      0,
+      Math.round(value),
+    ),
+  );
+}
+
+/**
+ * Firestoreから取得したAI評価設定と、
+ * デフォルト設定を結合します。
+ */
+function mergeAiWeights(
+  defaultWeights: AiScheduleWeights,
+  value:
+    | Partial<AiScheduleWeights>
+    | null
+    | undefined,
+): AiScheduleWeights {
+  return {
+    teacherGap:
+      normalizeAiWeight(
+        value?.teacherGap,
+        defaultWeights.teacherGap,
+      ),
+
+    studentGap:
+      normalizeAiWeight(
+        value?.studentGap,
+        defaultWeights.studentGap,
+      ),
+
+    teacherPreference:
+      normalizeAiWeight(
+        value?.teacherPreference,
+        defaultWeights.teacherPreference,
+      ),
+  };
+}
+
+/**
  * 1つの講習設定を
  * デフォルト設定と結合します。
  */
 function mergeSingleCourseSettings(
-  defaultCourse:
-    CourseScheduleSettingsMap[
-      keyof CourseScheduleSettingsMap
-    ],
+  defaultCourse: CourseScheduleSettings,
   value:
-    | Partial<
-        CourseScheduleSettingsMap[
-          keyof CourseScheduleSettingsMap
-        ]
-      >
+    | LegacyCourseScheduleSettings
     | null
     | undefined,
-): CourseScheduleSettingsMap[
-  keyof CourseScheduleSettingsMap
-] {
+): CourseScheduleSettings {
   return {
     ...defaultCourse,
     ...(value ?? {}),
@@ -267,6 +342,12 @@ function mergeSingleCourseSettings(
       ...defaultCourse.lessonRule,
       ...(value?.lessonRule ?? {}),
     },
+
+    aiWeights:
+      mergeAiWeights(
+        defaultCourse.aiWeights,
+        value?.aiWeights,
+      ),
 
     periods: Array.isArray(
       value?.periods,
@@ -290,32 +371,36 @@ function mergeSingleCourseSettings(
  */
 function mergeCourseSettings(
   value:
-    | Partial<CourseScheduleSettingsMap>
+    | LegacyCourseScheduleSettingsMap
     | null,
 ): CourseScheduleSettingsMap {
   const defaultCourses =
     defaultScheduleSettings.courses;
 
   return {
-    spring: mergeSingleCourseSettings(
-      defaultCourses.spring,
-      value?.spring,
-    ),
+    spring:
+      mergeSingleCourseSettings(
+        defaultCourses.spring,
+        value?.spring,
+      ),
 
-    summer: mergeSingleCourseSettings(
-      defaultCourses.summer,
-      value?.summer,
-    ),
+    summer:
+      mergeSingleCourseSettings(
+        defaultCourses.summer,
+        value?.summer,
+      ),
 
-    winter: mergeSingleCourseSettings(
-      defaultCourses.winter,
-      value?.winter,
-    ),
+    winter:
+      mergeSingleCourseSettings(
+        defaultCourses.winter,
+        value?.winter,
+      ),
 
-    other: mergeSingleCourseSettings(
-      defaultCourses.other,
-      value?.other,
-    ),
+    other:
+      mergeSingleCourseSettings(
+        defaultCourses.other,
+        value?.other,
+      ),
   };
 }
 
@@ -368,10 +453,15 @@ function normalizeSchoolHolidays(
   value: LegacyScheduleSettings | null,
 ): SchoolHoliday[] {
   if (
-    Array.isArray(value?.schoolHolidays)
+    Array.isArray(
+      value?.schoolHolidays,
+    )
   ) {
     const holidaysByDate =
-      new Map<string, SchoolHoliday>();
+      new Map<
+        string,
+        SchoolHoliday
+      >();
 
     value.schoolHolidays
       .filter(isSchoolHoliday)
@@ -387,32 +477,42 @@ function normalizeSchoolHolidays(
 
     return Array.from(
       holidaysByDate.values(),
-    ).sort((a, b) =>
-      a.date.localeCompare(b.date),
+    ).sort((holidayA, holidayB) =>
+      holidayA.date.localeCompare(
+        holidayB.date,
+      ),
     );
   }
 
-  if (Array.isArray(value?.closedDates)) {
-    const uniqueDates = Array.from(
-      new Set(
-        value.closedDates.filter(
-          isDateString,
+  if (
+    Array.isArray(
+      value?.closedDates,
+    )
+  ) {
+    const uniqueDates =
+      Array.from(
+        new Set(
+          value.closedDates.filter(
+            isDateString,
+          ),
         ),
-      ),
-    );
+      );
 
     return uniqueDates
       .map((date) => ({
         id: date,
         date,
       }))
-      .sort((a, b) =>
-        a.date.localeCompare(b.date),
+      .sort((holidayA, holidayB) =>
+        holidayA.date.localeCompare(
+          holidayB.date,
+        ),
       );
   }
 
   return cloneSchoolHolidays(
-    defaultScheduleSettings.schoolHolidays,
+    defaultScheduleSettings
+      .schoolHolidays,
   );
 }
 
@@ -430,16 +530,20 @@ function normalizeScheduleSettings(
     ...defaultScheduleSettings,
     ...(value ?? {}),
 
-    regular: mergeRegularSettings(
-      value?.regular ?? null,
-    ),
+    regular:
+      mergeRegularSettings(
+        value?.regular ?? null,
+      ),
 
-    courses: mergeCourseSettings(
-      value?.courses ?? null,
-    ),
+    courses:
+      mergeCourseSettings(
+        value?.courses ?? null,
+      ),
 
     schoolHolidays:
-      normalizeSchoolHolidays(value),
+      normalizeSchoolHolidays(
+        value,
+      ),
   };
 }
 
@@ -451,9 +555,10 @@ function normalizeScheduleSettings(
  */
 export async function getScheduleSettings(): Promise<ScheduleSettings> {
   try {
-    const snapshot = await getDoc(
-      scheduleSettingsDocument,
-    );
+    const snapshot =
+      await getDoc(
+        scheduleSettingsDocument,
+      );
 
     if (!snapshot.exists()) {
       return cloneScheduleSettings(
@@ -464,7 +569,9 @@ export async function getScheduleSettings(): Promise<ScheduleSettings> {
     const data =
       snapshot.data() as LegacyScheduleSettings;
 
-    return normalizeScheduleSettings(data);
+    return normalizeScheduleSettings(
+      data,
+    );
   } catch (error) {
     console.error(
       "スケジュール設定の取得に失敗しました。",
@@ -485,7 +592,9 @@ export async function saveScheduleSettings(
 ): Promise<void> {
   try {
     const normalizedSettings =
-      normalizeScheduleSettings(settings);
+      normalizeScheduleSettings(
+        settings,
+      );
 
     await setDoc(
       scheduleSettingsDocument,
@@ -543,7 +652,8 @@ export async function updateScheduleSettings(
                 updates.schoolHolidays,
               )
             : cloneSchoolHolidays(
-                currentSettings.schoolHolidays,
+                currentSettings
+                  .schoolHolidays,
               ),
       });
 
@@ -570,9 +680,10 @@ export async function updateScheduleSettings(
  */
 export async function initializeScheduleSettings(): Promise<ScheduleSettings> {
   try {
-    const snapshot = await getDoc(
-      scheduleSettingsDocument,
-    );
+    const snapshot =
+      await getDoc(
+        scheduleSettingsDocument,
+      );
 
     if (snapshot.exists()) {
       return normalizeScheduleSettings(
@@ -662,7 +773,9 @@ export async function saveRegularScheduleSettings(
     ...currentSettings,
 
     regular:
-      cloneRegularSettings(regular),
+      cloneRegularSettings(
+        regular,
+      ),
   });
 }
 
@@ -697,7 +810,9 @@ export async function saveCourseScheduleSettings(
     ...currentSettings,
 
     courses:
-      cloneCourseSettings(courses),
+      cloneCourseSettings(
+        courses,
+      ),
   });
 }
 

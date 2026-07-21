@@ -1,5 +1,6 @@
 "use client";
 
+import AiScoreSettings from "@/components/settings/AiScoreSettings";
 import LessonRuleSettings from "@/components/settings/LessonRuleSettings";
 import PeriodSettings from "@/components/settings/PeriodSettings";
 import WeekdaySettings from "@/components/settings/WeekdaySettings";
@@ -51,12 +52,23 @@ export default function CourseLessonSettings({
         description={`${COURSE_TYPE_LABELS[courseType]}の時限を設定してください。`}
         periods={value.periods}
         lessonDurationMinutes={
-          value.lessonRule.lessonDurationMinutes
+          value.lessonRule
+            .lessonDurationMinutes
         }
         onChange={(periods) =>
           onChange({
             ...value,
             periods,
+          })
+        }
+      />
+
+      <AiScoreSettings
+        value={value.aiWeights}
+        onChange={(aiWeights) =>
+          onChange({
+            ...value,
+            aiWeights,
           })
         }
       />

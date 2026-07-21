@@ -1,3 +1,5 @@
+import type { Lesson } from "@/types/lesson";
+
 import type {
   AISchedulerCandidate,
   AISchedulerCandidateStudent,
@@ -44,19 +46,66 @@ function createCandidateStudent(
   };
 }
 
+function findRequestForLessonStudent(
+  input: AISchedulerInput,
+  student: Lesson["students"][number],
+): AISchedulerStudentRequest | undefined {
+  return input.studentRequests.find(
+    (request) =>
+      request.studentId ===
+        student.studentId &&
+      request.subject === student.subject,
+  );
+}
+
+function convertLessonStudents(
+  input: AISchedulerInput,
+  lesson: Lesson,
+): AISchedulerCandidateStudent[] | null {
+  const students: AISchedulerCandidateStudent[] =
+    [];
+
+  for (const student of lesson.students) {
+    const request =
+      findRequestForLessonStudent(
+        input,
+        student,
+      );
+
+    if (!request) {
+      return null;
+    }
+
+    students.push(
+      createCandidateStudent(request),
+    );
+  }
+
+  return students;
+}
+
 function getTeacherPriority(
   request: AISchedulerStudentRequest,
   teacherId: string,
 ): number {
-  if (teacherId === request.currentTeacherId) {
+  if (
+    teacherId ===
+    request.currentTeacherId
+  ) {
     return 0;
   }
 
-  if (teacherId === request.firstChoiceTeacherId) {
+  if (
+    teacherId ===
+    request.firstChoiceTeacherId
+  ) {
     return 1;
   }
 
-  if (teacherId === request.secondChoiceTeacherId) {
+  if (
+    teacherId ===
+    request.secondChoiceTeacherId
+  ) {
     return 2;
   }
 
@@ -125,6 +174,7 @@ function createCandidate(
   teacher: AISchedulerTeacher,
   classroomId: string,
   classroomName: string,
+  students: AISchedulerCandidateStudent[],
 ): AISchedulerCandidate {
   return {
     id: createCandidateId(
@@ -138,13 +188,13 @@ function createCandidate(
     weekday,
     periodNumber,
     teacherId: teacher.id,
-    teacherNumber: teacher.teacherNumber,
-    teacherName: teacher.teacherName,
+    teacherNumber:
+      teacher.teacherNumber,
+    teacherName:
+      teacher.teacherName,
     classroomId,
     classroomName,
-    students: [
-      createCandidateStudent(request),
-    ],
+    students,
     score: {
       ...emptyScore,
       breakdown: {
@@ -161,19 +211,68 @@ function addRejectedReason(
   reasons.add(reason);
 }
 
+function isSameMergeSlot(
+  lesson: Lesson,
+  date: string,
+  periodNumber: number,
+  teacherId: string,
+  classroomId: string,
+): boolean {
+  return (
+    lesson.status !== "cancelled" &&
+    lesson.scheduleMode === "course" &&
+    lesson.date === date &&
+    lesson.periodNumber ===
+      periodNumber &&
+    lesson.teacherId === teacherId &&
+    lesson.classroomId === classroomId
+  );
+}
+
+function findMergeTargetLesson(
+  scheduledLessons: Lesson[],
+  date: string,
+  periodNumber: number,
+  teacherId: string,
+  classroomId: string,
+): Lesson | undefined {
+  return scheduledLessons.find(
+    (lesson) =>
+      isSameMergeSlot(
+        lesson,
+        date,
+        periodNumber,
+        teacherId,
+        classroomId,
+      ),
+  );
+}
+
+function removeMergeTargetLesson(
+  scheduledLessons: Lesson[],
+  targetLesson: Lesson,
+): Lesson[] {
+  return scheduledLessons.filter(
+    (lesson) => lesson !== targetLesson,
+  );
+}
+
 export function generateCandidatesForRequest(
   input: AISchedulerInput,
   request: AISchedulerStudentRequest,
   scheduledLessons: AISchedulerInput["existingCourseLessons"] = [],
 ): AISchedulerCandidateGenerationResult {
-  const candidates: AISchedulerCandidate[] = [];
+  const candidates: AISchedulerCandidate[] =
+    [];
+
   const rejectedReasons =
     new Set<AISchedulerUnassignedReason>();
 
-  const teachers = getTeacherCandidates(
-    input,
-    request,
-  );
+  const teachers =
+    getTeacherCandidates(
+      input,
+      request,
+    );
 
   if (teachers.length === 0) {
     addRejectedReason(
@@ -203,24 +302,95 @@ export function generateCandidatesForRequest(
     };
   }
 
+  const newStudent =
+    createCandidateStudent(request);
+
   for (const courseDay of input.courseDays) {
     for (const period of courseDay.periods) {
       for (const teacher of teachers) {
         for (const classroom of input.classrooms) {
-          const candidate = createCandidate(
-            request,
-            courseDay.date,
-            courseDay.weekday,
-            period.periodNumber,
-            teacher,
-            classroom.id,
-            classroom.name,
-          );
+          const mergeTarget =
+            findMergeTargetLesson(
+              scheduledLessons,
+              courseDay.date,
+              period.periodNumber,
+              teacher.id,
+              classroom.id,
+            );
+
+          let candidateStudents: AISchedulerCandidateStudent[] =
+            [newStudent];
+
+          let lessonsForValidation =
+            scheduledLessons;
+
+          if (mergeTarget) {
+            const studentAlreadyExists =
+              mergeTarget.students.some(
+                (student) =>
+                  student.studentId ===
+                  request.studentId,
+              );
+
+            if (studentAlreadyExists) {
+              addRejectedReason(
+                rejectedReasons,
+                "student-conflict",
+              );
+
+              continue;
+            }
+
+            const existingStudents =
+              convertLessonStudents(
+                input,
+                mergeTarget,
+              );
+
+            if (!existingStudents) {
+              addRejectedReason(
+                rejectedReasons,
+                "no-candidate",
+              );
+
+              continue;
+            }
+
+            candidateStudents = [
+              ...existingStudents,
+              newStudent,
+            ];
+
+            /*
+             * 結合対象の授業を一時的に除外します。
+             *
+             * これにより、同じ講師・同じ教室の
+             * 授業への生徒追加を競合扱いしません。
+             */
+            lessonsForValidation =
+              removeMergeTargetLesson(
+                scheduledLessons,
+                mergeTarget,
+              );
+          }
+
+          const candidate =
+            createCandidate(
+              request,
+              courseDay.date,
+              courseDay.weekday,
+              period.periodNumber,
+              teacher,
+              classroom.id,
+              classroom.name,
+              candidateStudents,
+            );
 
           const validationResult =
             validateCandidate(candidate, {
               input,
-              scheduledLessons,
+              scheduledLessons:
+                lessonsForValidation,
             });
 
           if (validationResult.valid) {

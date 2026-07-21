@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  useCallback,
   useEffect,
   useMemo,
   useState,
@@ -16,6 +17,10 @@ import {
   type ScheduleMode,
 } from "@/components/schedule";
 
+import AIScheduleProgressDialog from "@/components/schedule/ai/AIScheduleProgressDialog";
+
+import AIScheduleResultReport from "@/components/schedule/ai/AIScheduleResultReport";
+
 import LessonDialog from "@/components/schedule/dialog/LessonDialog";
 
 import CourseWeekSelect from "@/components/schedule/layout/CourseWeekSelect";
@@ -27,6 +32,10 @@ import StudentScheduleDialog, {
 import TeacherScheduleDialog, {
   type TeacherScheduleValues,
 } from "@/components/schedule/teacher-schedule/TeacherScheduleDialog";
+
+import {
+  useAIScheduleCreation,
+} from "@/hooks/schedule/useAIScheduleCreation";
 
 import {
   isRegularLessonPreview,
@@ -145,7 +154,6 @@ export default function SchedulePage() {
     selectedWeek,
     columns,
     periods,
-    selectedWeekId,
     setSelectedWeekId,
   } = useCourseSchedule({
     mode,
@@ -198,6 +206,14 @@ export default function SchedulePage() {
     [classrooms],
   );
 
+  const allLessons = useMemo(
+    () =>
+      Object.values(
+        lessonsByCell,
+      ).flat(),
+    [lessonsByCell],
+  );
+
   const {
     lessonDialogOpen,
     selectedCell,
@@ -237,29 +253,97 @@ export default function SchedulePage() {
     },
   });
 
-  function closeScheduleDialogs() {
-    handleCloseLessonDialog();
+  const closeScheduleDialogs =
+    useCallback(() => {
+      handleCloseLessonDialog();
 
-    setStudentScheduleDialogOpen(
-      false,
-    );
+      setStudentScheduleDialogOpen(
+        false,
+      );
 
-    setTeacherScheduleDialogOpen(
-      false,
-    );
-  }
+      setTeacherScheduleDialogOpen(
+        false,
+      );
+    }, [handleCloseLessonDialog]);
+
+  const currentStudentSchedules =
+    studentSchedulesByCourse[
+      selectedCourseType
+    ] ?? {};
+
+  const currentTeacherSchedules =
+    teacherSchedulesByCourse[
+      selectedCourseType
+    ] ?? {};
+
+  const {
+    aiScheduleResult,
+    isAIProcessing,
+    displayedAIProgress,
+    displayedAIProgressMessage,
+    clearAIState,
+    clearAIScheduleMessage,
+    createOrRebuildWithAI,
+  } = useAIScheduleCreation({
+    academicYear,
+
+    courseType:
+      selectedCourseType,
+
+    courseDates,
+
+    scheduleSettings,
+
+    students,
+
+    teachers,
+
+    classrooms:
+      sortedClassrooms,
+
+    activeStudents,
+
+    activeTeachers,
+
+    studentSchedules:
+      currentStudentSchedules,
+
+    teacherSchedules:
+      currentTeacherSchedules,
+
+    lessons:
+      allLessons,
+
+    setLessonsByCell,
+
+    setScheduleError,
+
+    closeScheduleDialogs,
+  });
 
   function handleModeChange(
     nextMode: ScheduleMode,
   ) {
+    if (isAIProcessing) {
+      return;
+    }
+
     setMode(nextMode);
 
     closeScheduleDialogs();
+
+    clearAIState();
+
+    setScheduleError("");
   }
 
   function handleCourseTypeChange(
     value: string,
   ) {
+    if (isAIProcessing) {
+      return;
+    }
+
     const nextCourseType =
       courseTypeOptions.find(
         (courseType) =>
@@ -275,6 +359,10 @@ export default function SchedulePage() {
     );
 
     closeScheduleDialogs();
+
+    clearAIState();
+
+    setScheduleError("");
   }
 
   function handleDisplayedLessonClick(
@@ -282,6 +370,7 @@ export default function SchedulePage() {
     lesson: Lesson,
   ) {
     if (
+      isAIProcessing ||
       isRegularLessonPreview(
         lesson,
       )
@@ -295,65 +384,29 @@ export default function SchedulePage() {
     );
   }
 
-  function handleCreateOrRebuildWithAI() {
-    console.log(
-      "AIで作成・組み直し",
-      {
-        academicYear,
+  async function handleCreateOrRebuildWithAI() {
+    if (mode !== "course") {
+      setScheduleError(
+        "AI時間割は講習スケジュールでのみ作成できます。",
+      );
 
-        scheduleMode:
-          mode,
+      return;
+    }
 
-        courseType:
-          mode === "course"
-            ? selectedCourseType
-            : undefined,
-
-        scheduleSettings,
-
-        selectedCourseSettings:
-          mode === "course"
-            ? selectedCourseSettings
-            : undefined,
-
-        schoolHolidays:
-          scheduleSettings
-            .schoolHolidays,
-
-        availableCourseDates:
-          mode === "course"
-            ? courseDates
-            : undefined,
-
-        classrooms:
-          sortedClassrooms,
-
-        displayedLessons:
-          displayLessonsByCell,
-
-        studentSchedules:
-          mode === "course"
-            ? studentSchedulesByCourse[
-                selectedCourseType
-              ]
-            : undefined,
-
-        teacherSchedules:
-          mode === "course"
-            ? teacherSchedulesByCourse[
-                selectedCourseType
-              ]
-            : undefined,
-      },
-    );
+    await createOrRebuildWithAI();
   }
 
   function handleOpenStudentSchedule() {
-    if (mode !== "course") {
+    if (
+      mode !== "course" ||
+      isAIProcessing
+    ) {
       return;
     }
 
     setScheduleError("");
+
+    clearAIScheduleMessage();
 
     handleCloseLessonDialog();
 
@@ -367,6 +420,10 @@ export default function SchedulePage() {
   }
 
   function handleCloseStudentSchedule() {
+    if (isAIProcessing) {
+      return;
+    }
+
     setStudentScheduleDialogOpen(
       false,
     );
@@ -377,6 +434,8 @@ export default function SchedulePage() {
   ) {
     try {
       setScheduleError("");
+
+      clearAIScheduleMessage();
 
       await saveStudentSchedules(
         academicYear,
@@ -409,11 +468,16 @@ export default function SchedulePage() {
   }
 
   function handleOpenTeacherSchedule() {
-    if (mode !== "course") {
+    if (
+      mode !== "course" ||
+      isAIProcessing
+    ) {
       return;
     }
 
     setScheduleError("");
+
+    clearAIScheduleMessage();
 
     handleCloseLessonDialog();
 
@@ -427,6 +491,10 @@ export default function SchedulePage() {
   }
 
   function handleCloseTeacherSchedule() {
+    if (isAIProcessing) {
+      return;
+    }
+
     setTeacherScheduleDialogOpen(
       false,
     );
@@ -437,6 +505,8 @@ export default function SchedulePage() {
   ) {
     try {
       setScheduleError("");
+
+      clearAIScheduleMessage();
 
       await saveTeacherSchedules(
         academicYear,
@@ -515,6 +585,16 @@ export default function SchedulePage() {
             </div>
           ) : null}
 
+          <AIScheduleResultReport
+            result={
+              aiScheduleResult
+            }
+            aiWeights={
+              selectedCourseSettings
+                .aiWeights
+            }
+          />
+
           {mode === "course" ? (
             <div className="w-full rounded-3xl border border-zinc-200 bg-white p-5 shadow-sm">
               <div className="max-w-xs">
@@ -522,6 +602,9 @@ export default function SchedulePage() {
                   label="講習"
                   value={
                     selectedCourseType
+                  }
+                  disabled={
+                    isAIProcessing
                   }
                   onChange={(
                     event,
@@ -580,6 +663,9 @@ export default function SchedulePage() {
 
           <ScheduleToolbar
             scheduleMode={mode}
+            isGenerating={
+              isAIProcessing
+            }
             onAddLesson={
               handleAddLesson
             }
@@ -626,25 +712,36 @@ export default function SchedulePage() {
               </p>
             </div>
           ) : (
-            <ScheduleGrid
-              columns={columns}
-              periods={periods}
-              lessonsByCell={
-                displayLessonsByCell
+            <div
+              className={
+                isAIProcessing
+                  ? "pointer-events-none opacity-60"
+                  : ""
               }
-              onCellClick={
-                handleCellClick
-              }
-              onLessonClick={
-                handleDisplayedLessonClick
-              }
-            />
+            >
+              <ScheduleGrid
+                columns={columns}
+                periods={periods}
+                lessonsByCell={
+                  displayLessonsByCell
+                }
+                onCellClick={
+                  handleCellClick
+                }
+                onLessonClick={
+                  handleDisplayedLessonClick
+                }
+              />
+            </div>
           )}
         </div>
       </main>
 
       <LessonDialog
-        open={lessonDialogOpen}
+        open={
+          lessonDialogOpen &&
+          !isAIProcessing
+        }
         position={selectedCell}
         teachers={activeTeachers}
         students={activeStudents}
@@ -672,15 +769,14 @@ export default function SchedulePage() {
 
       <StudentScheduleDialog
         open={
-          studentScheduleDialogOpen
+          studentScheduleDialogOpen &&
+          !isAIProcessing
         }
         students={activeStudents}
         dates={courseDates}
         periods={coursePeriods}
         initialValues={
-          studentSchedulesByCourse[
-            selectedCourseType
-          ]
+          currentStudentSchedules
         }
         onClose={
           handleCloseStudentSchedule
@@ -692,21 +788,30 @@ export default function SchedulePage() {
 
       <TeacherScheduleDialog
         open={
-          teacherScheduleDialogOpen
+          teacherScheduleDialogOpen &&
+          !isAIProcessing
         }
         teachers={activeTeachers}
         dates={courseDates}
         periods={coursePeriods}
         initialValues={
-          teacherSchedulesByCourse[
-            selectedCourseType
-          ]
+          currentTeacherSchedules
         }
         onClose={
           handleCloseTeacherSchedule
         }
         onSave={
           handleSaveTeacherSchedule
+        }
+      />
+
+      <AIScheduleProgressDialog
+        open={isAIProcessing}
+        progress={
+          displayedAIProgress
+        }
+        message={
+          displayedAIProgressMessage
         }
       />
     </>

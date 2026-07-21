@@ -313,25 +313,7 @@ export function useCourseLessons({
               coursePosition,
             );
 
-          const savedLessonsInCell =
-            lessonsByCell[
-              cellKey
-            ] ?? [];
-
-          /*
-           * 同じセルに保存済みの講習授業がある場合は、
-           * 講習授業を優先します。
-           */
-          const hasCourseLesson =
-            savedLessonsInCell.some(
-              (lesson) =>
-                lesson.scheduleMode ===
-                "course",
-            );
-
-          if (hasCourseLesson) {
-            continue;
-          }
+        
 
           /*
            * FirestoreのIDが未設定の場合にも

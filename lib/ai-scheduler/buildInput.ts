@@ -687,15 +687,30 @@ export function buildAISchedulerInput(
       courseSettings.lessonRule
         .maxStudentsPerTeacher,
 
-    options: {
+       options: {
       preserveExistingLessons:
         params.preserveExistingLessons,
 
       scoreSettings:
-        normalizeAISchedulerScoreSettings(
-          params.scoreSettings ??
-            defaultAISchedulerScoreSettings,
-        ),
+        normalizeAISchedulerScoreSettings({
+          teacherIdleWeight:
+            params.scoreSettings
+              ?.teacherIdleWeight ??
+            courseSettings.aiWeights
+              .teacherGap,
+
+          studentIdleWeight:
+            params.scoreSettings
+              ?.studentIdleWeight ??
+            courseSettings.aiWeights
+              .studentGap,
+
+          teacherPreferenceWeight:
+            params.scoreSettings
+              ?.teacherPreferenceWeight ??
+            courseSettings.aiWeights
+              .teacherPreference,
+        }),
     },
   };
 }

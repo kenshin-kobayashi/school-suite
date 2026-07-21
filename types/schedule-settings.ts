@@ -54,6 +54,29 @@ export type LessonPeriod = {
   isEnabled: boolean;
 };
 
+/**
+ * AI時間割作成時の評価配分です。
+ *
+ * 各項目は0〜100点で設定し、
+ * 3項目の合計を100点にします。
+ */
+export type AiScheduleWeights = {
+  /**
+   * 講師の空きコマを少なくする評価
+   */
+  teacherGap: number;
+
+  /**
+   * 生徒の空きコマを少なくする評価
+   */
+  studentGap: number;
+
+  /**
+   * 担当講師・希望講師を優先する評価
+   */
+  teacherPreference: number;
+};
+
 export type RegularScheduleSettings = {
   mode: "regular";
 
@@ -111,6 +134,11 @@ export type CourseScheduleSettings = {
    * 授業ルール
    */
   lessonRule: LessonRule;
+
+  /**
+   * AI時間割作成時の評価配分
+   */
+  aiWeights: AiScheduleWeights;
 
   /**
    * 講習の時限

@@ -1,9 +1,16 @@
 import type {
+  AiScheduleWeights,
   CourseScheduleSettings,
   CourseType,
   LessonPeriod,
   ScheduleSettings,
 } from "@/types/schedule-settings";
+
+const defaultAiWeights: AiScheduleWeights = {
+  teacherGap: 35,
+  studentGap: 35,
+  teacherPreference: 30,
+};
 
 const regularPeriods: LessonPeriod[] = [
   {
@@ -129,6 +136,15 @@ const createCourseSettings = (
   lessonRule: {
     lessonDurationMinutes: 80,
     maxStudentsPerTeacher: 2,
+  },
+
+  /**
+   * AI時間割作成時の評価配分です。
+   *
+   * 3項目の合計は100点にします。
+   */
+  aiWeights: {
+    ...defaultAiWeights,
   },
 
   periods:

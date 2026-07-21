@@ -24,8 +24,12 @@ function clamp(
   );
 }
 
-function roundScore(value: number): number {
-  return Math.round(value * 100) / 100;
+function roundScore(
+  value: number,
+): number {
+  return (
+    Math.round(value * 100) / 100
+  );
 }
 
 function getUniquePeriodNumbers(
@@ -33,22 +37,31 @@ function getUniquePeriodNumbers(
 ): number[] {
   return Array.from(
     new Set(periodNumbers),
-  ).sort((periodA, periodB) => periodA - periodB);
+  ).sort(
+    (periodA, periodB) =>
+      periodA - periodB,
+  );
 }
 
 function calculateIdlePeriodCount(
   periodNumbers: number[],
 ): number {
   const uniquePeriods =
-    getUniquePeriodNumbers(periodNumbers);
+    getUniquePeriodNumbers(
+      periodNumbers,
+    );
 
   if (uniquePeriods.length <= 1) {
     return 0;
   }
 
-  const firstPeriod = uniquePeriods[0];
+  const firstPeriod =
+    uniquePeriods[0];
+
   const lastPeriod =
-    uniquePeriods[uniquePeriods.length - 1];
+    uniquePeriods[
+      uniquePeriods.length - 1
+    ];
 
   return (
     lastPeriod -
@@ -58,6 +71,11 @@ function calculateIdlePeriodCount(
   );
 }
 
+/**
+ * 候補を追加したときに、
+ * 授業がどれだけ連続するかを
+ * 0〜1で評価します。
+ */
 function calculateCompactnessRatio(
   existingPeriodNumbers: number[],
   candidatePeriodNumber: number,
@@ -73,10 +91,18 @@ function calculateCompactnessRatio(
       candidatePeriodNumber,
     ]);
 
+  /*
+   * 同じ日に授業がまだない場合は、
+   * 連続性を判断できないため中間評価。
+   */
   if (beforePeriods.length === 0) {
     return 0.5;
   }
 
+  /*
+   * 既存授業へ生徒を追加する場合です。
+   * 新しい空きコマを作らないため最高評価。
+   */
   if (
     beforePeriods.includes(
       candidatePeriodNumber,
@@ -86,32 +112,57 @@ function calculateCompactnessRatio(
   }
 
   const beforeIdleCount =
-    calculateIdlePeriodCount(beforePeriods);
+    calculateIdlePeriodCount(
+      beforePeriods,
+    );
 
   const afterIdleCount =
-    calculateIdlePeriodCount(afterPeriods);
+    calculateIdlePeriodCount(
+      afterPeriods,
+    );
 
-  const isAdjacent = beforePeriods.some(
-    (periodNumber) =>
-      Math.abs(
-        periodNumber -
-          candidatePeriodNumber,
-      ) === 1,
-  );
+  const isAdjacent =
+    beforePeriods.some(
+      (periodNumber) =>
+        Math.abs(
+          periodNumber -
+            candidatePeriodNumber,
+        ) === 1,
+    );
 
-  if (afterIdleCount < beforeIdleCount) {
+  /*
+   * 既存の空きコマを埋める場合。
+   */
+  if (
+    afterIdleCount <
+    beforeIdleCount
+  ) {
     return 1;
   }
 
-  if (afterIdleCount === beforeIdleCount) {
-    return isAdjacent ? 1 : 0.75;
+  /*
+   * 空きコマを増やさない場合。
+   *
+   * 連続コマなら最高評価、
+   * 離れていても空きコマ数が
+   * 増えなければ少し高めに評価します。
+   */
+  if (
+    afterIdleCount ===
+    beforeIdleCount
+  ) {
+    return isAdjacent
+      ? 1
+      : 0.75;
   }
 
   const addedIdleCount =
-    afterIdleCount - beforeIdleCount;
+    afterIdleCount -
+    beforeIdleCount;
 
   return clamp(
-    1 - addedIdleCount * 0.25,
+    1 -
+      addedIdleCount * 0.25,
     0,
     1,
   );
@@ -122,7 +173,8 @@ function getLessonsForScoring(
   scheduledLessons: Lesson[],
 ): Lesson[] {
   const preservedLessons =
-    input.options.preserveExistingLessons
+    input.options
+      .preserveExistingLessons
       ? input.existingCourseLessons
       : [];
 
@@ -130,41 +182,81 @@ function getLessonsForScoring(
     ...input.regularLessons,
     ...preservedLessons,
     ...scheduledLessons,
-  ];
+  ].filter(
+    (lesson) =>
+      lesson.status !== "cancelled",
+  );
+}
+
+/**
+ * 候補日と同じ日に実施される授業かを判定します。
+ *
+ * 通常授業：
+ * 曜日が一致するか確認
+ *
+ * 講習授業：
+ * 日付が一致するか確認
+ */
+function isLessonOnCandidateDay(
+  lesson: Lesson,
+  candidate: AISchedulerCandidate,
+): boolean {
+  if (
+    lesson.scheduleMode === "regular"
+  ) {
+    return (
+      lesson.weekday ===
+      candidate.weekday
+    );
+  }
+
+  return (
+    lesson.date === candidate.date
+  );
 }
 
 function getTeacherPeriodNumbers(
   lessons: Lesson[],
   teacherId: string,
-  date: string,
+  candidate: AISchedulerCandidate,
 ): number[] {
   return lessons
     .filter(
       (lesson) =>
-        lesson.teacherId === teacherId &&
-        lesson.date === date,
+        lesson.teacherId ===
+          teacherId &&
+        isLessonOnCandidateDay(
+          lesson,
+          candidate,
+        ),
     )
     .map(
-      (lesson) => lesson.periodNumber,
+      (lesson) =>
+        lesson.periodNumber,
     );
 }
 
 function getStudentPeriodNumbers(
   lessons: Lesson[],
   studentId: string,
-  date: string,
+  candidate: AISchedulerCandidate,
 ): number[] {
   return lessons
     .filter(
       (lesson) =>
-        lesson.date === date &&
+        isLessonOnCandidateDay(
+          lesson,
+          candidate,
+        ) &&
         lesson.students.some(
           (student) =>
-            student.studentId === studentId,
+            student.studentId ===
+            studentId,
         ),
     )
     .map(
-      (lesson) => lesson.periodNumber,
+      (lesson) =>
+        lesson.periodNumber,
     );
 }
 
@@ -173,10 +265,16 @@ function getRequest(
   requestId: string,
 ): AISchedulerStudentRequest | undefined {
   return input.studentRequests.find(
-    (request) => request.id === requestId,
+    (request) =>
+      request.id === requestId,
   );
 }
 
+/**
+ * 講師について、
+ * 通常授業・既存講習・新規講習が
+ * 連続コマになるほど高く評価します。
+ */
 function calculateTeacherIdleRatio(
   candidate: AISchedulerCandidate,
   lessons: Lesson[],
@@ -185,7 +283,7 @@ function calculateTeacherIdleRatio(
     getTeacherPeriodNumbers(
       lessons,
       candidate.teacherId,
-      candidate.date,
+      candidate,
     );
 
   return calculateCompactnessRatio(
@@ -194,11 +292,18 @@ function calculateTeacherIdleRatio(
   );
 }
 
+/**
+ * 生徒について、
+ * 通常授業・既存講習・新規講習が
+ * 連続コマになるほど高く評価します。
+ */
 function calculateStudentIdleRatio(
   candidate: AISchedulerCandidate,
   lessons: Lesson[],
 ): number {
-  if (candidate.students.length === 0) {
+  if (
+    candidate.students.length === 0
+  ) {
     return 0;
   }
 
@@ -209,7 +314,7 @@ function calculateStudentIdleRatio(
           getStudentPeriodNumbers(
             lessons,
             student.studentId,
-            candidate.date,
+            candidate,
           );
 
         return (
@@ -233,7 +338,9 @@ function calculateTeacherPreferenceRatio(
   candidate: AISchedulerCandidate,
   input: AISchedulerInput,
 ): number {
-  if (candidate.students.length === 0) {
+  if (
+    candidate.students.length === 0
+  ) {
     return 0;
   }
 
@@ -286,7 +393,11 @@ function calculateWeightedScore(
   weight: number,
 ): number {
   return roundScore(
-    clamp(ratio, 0, 1) * weight,
+    clamp(
+      ratio,
+      0,
+      1,
+    ) * weight,
   );
 }
 
@@ -299,14 +410,16 @@ export function calculateCandidateScore(
   const normalizedSettings =
     normalizeAISchedulerScoreSettings(
       settings ??
-        input.options.scoreSettings ??
+        input.options
+          .scoreSettings ??
         defaultAISchedulerScoreSettings,
     );
 
-  const lessons = getLessonsForScoring(
-    input,
-    scheduledLessons,
-  );
+  const lessons =
+    getLessonsForScoring(
+      input,
+      scheduledLessons,
+    );
 
   const teacherIdleScore =
     calculateWeightedScore(
@@ -314,7 +427,8 @@ export function calculateCandidateScore(
         candidate,
         lessons,
       ),
-      normalizedSettings.teacherIdleWeight,
+      normalizedSettings
+        .teacherIdleWeight,
     );
 
   const studentIdleScore =
@@ -323,7 +437,8 @@ export function calculateCandidateScore(
         candidate,
         lessons,
       ),
-      normalizedSettings.studentIdleWeight,
+      normalizedSettings
+        .studentIdleWeight,
     );
 
   const teacherPreferenceScore =
@@ -332,14 +447,16 @@ export function calculateCandidateScore(
         candidate,
         input,
       ),
-      normalizedSettings.teacherPreferenceWeight,
+      normalizedSettings
+        .teacherPreferenceWeight,
     );
 
-  const totalScore = roundScore(
-    teacherIdleScore +
-      studentIdleScore +
-      teacherPreferenceScore,
-  );
+  const totalScore =
+    roundScore(
+      teacherIdleScore +
+        studentIdleScore +
+        teacherPreferenceScore,
+    );
 
   return {
     totalScore,
@@ -359,11 +476,12 @@ export function scoreCandidate(
 ): AISchedulerCandidate {
   return {
     ...candidate,
-    score: calculateCandidateScore(
-      candidate,
-      input,
-      scheduledLessons,
-    ),
+    score:
+      calculateCandidateScore(
+        candidate,
+        input,
+        scheduledLessons,
+      ),
   };
 }
 
@@ -381,8 +499,13 @@ export function scoreCandidates(
       ),
     )
     .sort(
-      (candidateA, candidateB) =>
-        candidateB.score.totalScore -
-        candidateA.score.totalScore,
+      (
+        candidateA,
+        candidateB,
+      ) =>
+        candidateB.score
+          .totalScore -
+        candidateA.score
+          .totalScore,
     );
 }
