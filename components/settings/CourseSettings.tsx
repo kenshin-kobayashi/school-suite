@@ -9,7 +9,6 @@ import {
 import PrimaryButton from "@/components/common/PrimaryButton";
 
 import CourseBasicSettings from "@/components/settings/CourseBasicSettings";
-import CourseImportSettings from "@/components/settings/CourseImportSettings";
 import CourseLessonSettings from "@/components/settings/CourseLessonSettings";
 
 import {
@@ -127,12 +126,15 @@ function cloneCourses(
   return {
     spring: {
       ...courses.spring,
+
       enabledWeekdays: [
         ...courses.spring.enabledWeekdays,
       ],
+
       lessonRule: {
         ...courses.spring.lessonRule,
       },
+
       periods: courses.spring.periods.map(
         (period) => ({
           ...period,
@@ -142,12 +144,15 @@ function cloneCourses(
 
     summer: {
       ...courses.summer,
+
       enabledWeekdays: [
         ...courses.summer.enabledWeekdays,
       ],
+
       lessonRule: {
         ...courses.summer.lessonRule,
       },
+
       periods: courses.summer.periods.map(
         (period) => ({
           ...period,
@@ -157,12 +162,15 @@ function cloneCourses(
 
     winter: {
       ...courses.winter,
+
       enabledWeekdays: [
         ...courses.winter.enabledWeekdays,
       ],
+
       lessonRule: {
         ...courses.winter.lessonRule,
       },
+
       periods: courses.winter.periods.map(
         (period) => ({
           ...period,
@@ -172,12 +180,15 @@ function cloneCourses(
 
     other: {
       ...courses.other,
+
       enabledWeekdays: [
         ...courses.other.enabledWeekdays,
       ],
+
       lessonRule: {
         ...courses.other.lessonRule,
       },
+
       periods: courses.other.periods.map(
         (period) => ({
           ...period,
@@ -268,9 +279,10 @@ function validateCourseSettings(
       };
     }
 
-    const enabledPeriods = course.periods.filter(
-      (period) => period.isEnabled,
-    );
+    const enabledPeriods =
+      course.periods.filter(
+        (period) => period.isEnabled,
+      );
 
     if (enabledPeriods.length === 0) {
       return {
@@ -280,11 +292,12 @@ function validateCourseSettings(
       };
     }
 
-    const hasInvalidPeriod = course.periods.some(
-      (period) =>
-        !period.startTime.trim() ||
-        !period.endTime.trim(),
-    );
+    const hasInvalidPeriod =
+      course.periods.some(
+        (period) =>
+          !period.startTime.trim() ||
+          !period.endTime.trim(),
+      );
 
     if (hasInvalidPeriod) {
       return {
@@ -422,17 +435,14 @@ export default function CourseSettings() {
     setSuccessMessage(null);
 
     try {
-      /*
-       * 保存直前に最新の全設定を取得し、
-       * 通常授業などの設定を消さずに
-       * coursesだけを置き換えます。
-       */
       const currentSettings =
         await getScheduleSettings();
 
       await saveScheduleSettings({
         ...currentSettings,
-        courses: cloneCourses(courses),
+
+        courses:
+          cloneCourses(courses),
       });
 
       setHasChanges(false);
@@ -514,21 +524,6 @@ export default function CourseSettings() {
         courseType={selectedCourseType}
         value={currentCourse}
         onChange={updateCurrentCourse}
-      />
-
-      <CourseImportSettings
-        value={
-          currentCourse
-            .shouldImportRegularLessons
-        }
-        onChange={(
-          shouldImportRegularLessons,
-        ) =>
-          updateCurrentCourse({
-            ...currentCourse,
-            shouldImportRegularLessons,
-          })
-        }
       />
 
       <div className="flex justify-end border-t border-zinc-200 pt-6">

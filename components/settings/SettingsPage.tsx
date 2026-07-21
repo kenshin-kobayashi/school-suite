@@ -7,6 +7,7 @@ import PageHeader from "@/components/common/PageHeader";
 import AcademicYearSettings from "./AcademicYearSettings";
 import ClassroomSettings from "./ClassroomSettings";
 import CourseSettings from "./CourseSettings";
+import HolidaySettings from "./HolidaySettings";
 import RegularSettings from "./RegularSettings";
 import SettingsNavigation from "./SettingsNavigation";
 
@@ -14,6 +15,7 @@ export type SettingsMenu =
   | "regular"
   | "courses"
   | "classrooms"
+  | "holidays"
   | "academic-year";
 
 export default function SettingsPage() {
@@ -43,7 +45,12 @@ export default function SettingsPage() {
             <ClassroomSettings />
           )}
 
-          {selectedMenu === "academic-year" && (
+          {selectedMenu === "holidays" && (
+            <HolidaySettings />
+          )}
+
+          {selectedMenu ===
+            "academic-year" && (
             <AcademicYearSettings />
           )}
         </main>

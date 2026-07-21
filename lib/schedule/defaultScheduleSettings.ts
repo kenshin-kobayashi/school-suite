@@ -103,9 +103,19 @@ const createCourseSettings = (
   endDate = "",
 ): CourseScheduleSettings => ({
   mode: "course",
+
   courseType,
+
   startDate,
+
   endDate,
+
+  /**
+   * 初期状態では通常授業を講習画面へ反映します。
+   *
+   * 設定画面のオン・オフで変更できます。
+   */
+  showRegularLessons: true,
 
   enabledWeekdays: [
     "monday",
@@ -121,9 +131,8 @@ const createCourseSettings = (
     maxStudentsPerTeacher: 2,
   },
 
-  periods: createCoursePeriods(courseType),
-
-  shouldImportRegularLessons: false,
+  periods:
+    createCoursePeriods(courseType),
 });
 
 export const defaultScheduleSettings: ScheduleSettings = {
@@ -150,15 +159,31 @@ export const defaultScheduleSettings: ScheduleSettings = {
   },
 
   courses: {
-    spring: createCourseSettings("spring"),
-    summer: createCourseSettings(
-      "summer",
-      "2026-07-20",
-      "2026-08-31",
-    ),
-    winter: createCourseSettings("winter"),
-    other: createCourseSettings("other"),
+    spring:
+      createCourseSettings(
+        "spring",
+      ),
+
+    summer:
+      createCourseSettings(
+        "summer",
+        "2026-07-20",
+        "2026-08-31",
+      ),
+
+    winter:
+      createCourseSettings(
+        "winter",
+      ),
+
+    other:
+      createCourseSettings(
+        "other",
+      ),
   },
 
-  closedDates: [],
+  /**
+   * 休塾日一覧
+   */
+  schoolHolidays: [],
 };

@@ -1,9 +1,9 @@
 import type {
-  ScheduleMode,
   Weekday,
 } from "@/types/schedule";
 
-export type LessonCapacity = number;
+export type LessonCapacity =
+  number;
 
 export type CourseType =
   | "spring"
@@ -11,7 +11,10 @@ export type CourseType =
   | "winter"
   | "other";
 
-export const COURSE_TYPE_LABELS: Record<CourseType, string> = {
+export const COURSE_TYPE_LABELS: Record<
+  CourseType,
+  string
+> = {
   spring: "春期講習",
   summer: "夏期講習",
   winter: "冬期講習",
@@ -94,6 +97,17 @@ export type CourseScheduleSettings = {
   enabledWeekdays: Weekday[];
 
   /**
+   * 講習画面に通常授業を反映するか
+   *
+   * true:
+   * 通常授業を講習期間の日付に変換して表示する
+   *
+   * false:
+   * 講習授業だけを表示する
+   */
+  showRegularLessons: boolean;
+
+  /**
    * 授業ルール
    */
   lessonRule: LessonRule;
@@ -102,20 +116,28 @@ export type CourseScheduleSettings = {
    * 講習の時限
    */
   periods: LessonPeriod[];
-
-  /**
-   * 通常授業を反映する際の初期設定
-   *
-   * 実際の反映処理はスケジュール画面の
-   * 「通常授業を反映」ボタンから実行する
-   */
-  shouldImportRegularLessons: boolean;
 };
 
-export type CourseScheduleSettingsMap = Record<
-  CourseType,
-  CourseScheduleSettings
->;
+export type CourseScheduleSettingsMap =
+  Record<
+    CourseType,
+    CourseScheduleSettings
+  >;
+
+/**
+ * 休塾日設定
+ */
+export type SchoolHoliday = {
+  /**
+   * 休塾日を識別するID
+   */
+  id: string;
+
+  /**
+   * YYYY-MM-DD形式
+   */
+  date: string;
+};
 
 export type ScheduleSettings = {
   id: string;
@@ -128,11 +150,9 @@ export type ScheduleSettings = {
   courses: CourseScheduleSettingsMap;
 
   /**
-   * YYYY-MM-DD形式の休塾日
-   *
-   * 設定操作はスケジュール画面から行う
+   * 登録済みの休塾日
    */
-  closedDates: string[];
+  schoolHolidays: SchoolHoliday[];
 
   updatedAt?: unknown;
 };

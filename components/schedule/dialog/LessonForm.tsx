@@ -17,6 +17,7 @@ import TeacherSelector from "@/components/lesson/TeacherSelector";
 import type { Student } from "@/lib/firebase/students";
 import type { Teacher } from "@/lib/firebase/teachers";
 
+import type { Classroom } from "@/types/classroom";
 import type { ScheduleCellPosition } from "@/types/schedule-cell";
 
 import LessonBasicInfo from "./LessonBasicInfo";
@@ -33,6 +34,10 @@ export type LessonFormValues = {
   teacherId: string;
   teacherNumber: string;
   teacherName: string;
+
+  classroomId: string;
+  classroomName: string;
+
   students: LessonStudentValue[];
 };
 
@@ -40,16 +45,24 @@ export type LessonFormInitialValues = {
   teacherId?: string;
   teacherNumber?: string;
   teacherName?: string;
+
+  classroomId?: string;
+  classroomName?: string;
+
   students?: LessonStudentValue[];
 };
 
 type LessonFormProps = {
   formId: string;
   position: ScheduleCellPosition;
+
   teachers: Teacher[];
   students: Student[];
+  classrooms: Classroom[];
+
   initialValues?: LessonFormInitialValues;
   disabled?: boolean;
+
   onSubmit: (
     values: LessonFormValues,
   ) => void | Promise<void>;
@@ -57,6 +70,7 @@ type LessonFormProps = {
 
 type FormErrors = {
   teacher?: string;
+  classroom?: string;
   students?: string;
 };
 
@@ -103,6 +117,7 @@ export default function LessonForm({
   position,
   teachers,
   students,
+  classrooms,
   initialValues,
   disabled = false,
   onSubmit,
@@ -110,6 +125,11 @@ export default function LessonForm({
   const [teacherId, setTeacherId] = useState(
     initialValues?.teacherId ?? "",
   );
+
+  const [classroomId, setClassroomId] =
+    useState(
+      initialValues?.classroomId ?? "",
+    );
 
   const [studentRows, setStudentRows] = useState<
     LessonStudentRow[]
@@ -121,6 +141,10 @@ export default function LessonForm({
   useEffect(() => {
     setTeacherId(
       initialValues?.teacherId ?? "",
+    );
+
+    setClassroomId(
+      initialValues?.classroomId ?? "",
     );
 
     setStudentRows(
@@ -142,6 +166,23 @@ export default function LessonForm({
     );
   }, [students]);
 
+  const availableClassrooms = useMemo(() => {
+    return [...classrooms]
+      .filter(
+        (
+          classroom,
+        ): classroom is Classroom & {
+          id: string;
+        } => Boolean(classroom.id),
+      )
+      .sort((firstClassroom, secondClassroom) =>
+        firstClassroom.name.localeCompare(
+          secondClassroom.name,
+          "ja",
+        ),
+      );
+  }, [classrooms]);
+
   const selectedTeacher = useMemo(() => {
     return (
       activeTeachers.find(
@@ -149,6 +190,15 @@ export default function LessonForm({
       ) ?? null
     );
   }, [activeTeachers, teacherId]);
+
+  const selectedClassroom = useMemo(() => {
+    return (
+      availableClassrooms.find(
+        (classroom) =>
+          classroom.id === classroomId,
+      ) ?? null
+    );
+  }, [availableClassrooms, classroomId]);
 
   const teacherSubjects = useMemo(() => {
     if (!selectedTeacher) {
@@ -209,6 +259,17 @@ export default function LessonForm({
     setErrors((currentErrors) => ({
       ...currentErrors,
       teacher: undefined,
+    }));
+  };
+
+  const handleClassroomChange = (
+    nextClassroomId: string,
+  ) => {
+    setClassroomId(nextClassroomId);
+
+    setErrors((currentErrors) => ({
+      ...currentErrors,
+      classroom: undefined,
     }));
   };
 
@@ -295,6 +356,11 @@ export default function LessonForm({
         "担当講師を選択してください。";
     }
 
+    if (!selectedClassroom?.id) {
+      nextErrors.classroom =
+        "教室を選択してください。";
+    }
+
     const completedRows = studentRows.filter(
       (row) => row.studentId || row.subject,
     );
@@ -350,13 +416,17 @@ export default function LessonForm({
 
     if (
       nextErrors.teacher ||
+      nextErrors.classroom ||
       nextErrors.students
     ) {
       setErrors(nextErrors);
       return;
     }
 
-    if (!selectedTeacher?.id) {
+    if (
+      !selectedTeacher?.id ||
+      !selectedClassroom?.id
+    ) {
       return;
     }
 
@@ -420,6 +490,10 @@ export default function LessonForm({
       teacherNumber:
         selectedTeacher.teacherNumber,
       teacherName: selectedTeacher.name,
+
+      classroomId: selectedClassroom.id,
+      classroomName: selectedClassroom.name,
+
       students: lessonStudents,
     });
   };
@@ -448,6 +522,61 @@ export default function LessonForm({
           {errors.teacher && (
             <p className="text-xs font-medium text-red-600">
               {errors.teacher}
+            </p>
+          )}
+        </section>
+
+        <section className="space-y-3">
+          <div>
+            <label
+              htmlFor={`${formId}-classroom`}
+              className="text-sm font-bold text-zinc-800"
+            >
+              教室
+            </label>
+
+            <p className="mt-1 text-xs leading-5 text-zinc-500">
+              この授業で使用する教室を選択してください。
+            </p>
+          </div>
+
+          <select
+            id={`${formId}-classroom`}
+            value={classroomId}
+            onChange={(event) =>
+              handleClassroomChange(
+                event.target.value,
+              )
+            }
+            className="h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm font-medium text-zinc-800 outline-none transition focus:border-zinc-400 focus:ring-2 focus:ring-zinc-900/10 disabled:cursor-not-allowed disabled:bg-zinc-100"
+          >
+            <option value="">
+              教室を選択してください
+            </option>
+
+            {availableClassrooms.map(
+              (classroom) => (
+                <option
+                  key={classroom.id}
+                  value={classroom.id}
+                >
+                  {classroom.name}
+                </option>
+              ),
+            )}
+          </select>
+
+          {availableClassrooms.length === 0 && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+              <p className="text-sm font-semibold text-amber-700">
+                使用できる教室が登録されていません。設定画面から教室を登録してください。
+              </p>
+            </div>
+          )}
+
+          {errors.classroom && (
+            <p className="text-xs font-medium text-red-600">
+              {errors.classroom}
             </p>
           )}
         </section>

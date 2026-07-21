@@ -12,6 +12,7 @@ import SecondaryButton from "@/components/common/SecondaryButton";
 import type { Student } from "@/lib/firebase/students";
 import type { Teacher } from "@/lib/firebase/teachers";
 
+import type { Classroom } from "@/types/classroom";
 import type { ScheduleCellPosition } from "@/types/schedule-cell";
 
 import LessonForm, {
@@ -25,6 +26,7 @@ type LessonDialogProps = {
 
   teachers: Teacher[];
   students: Student[];
+  classrooms: Classroom[];
 
   initialValues?: LessonFormInitialValues;
 
@@ -46,6 +48,7 @@ export default function LessonDialog({
   position,
   teachers,
   students,
+  classrooms,
   initialValues,
   mode = "create",
   onClose,
@@ -209,6 +212,14 @@ export default function LessonDialog({
           </div>
         )}
 
+        {classrooms.length === 0 && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+            <p className="text-sm font-semibold text-amber-800">
+              教室が登録されていません。設定画面から教室を登録してください。
+            </p>
+          </div>
+        )}
+
         {errorMessage && (
           <div
             role="alert"
@@ -226,11 +237,13 @@ export default function LessonDialog({
               mode,
               position.columnId,
               position.periodId,
+              initialValues?.classroomId ?? "",
             ].join("-")}
             formId={LESSON_FORM_ID}
             position={position}
             teachers={teachers}
             students={students}
+            classrooms={classrooms}
             initialValues={initialValues}
             disabled={isProcessing}
             onSubmit={handleSubmit}

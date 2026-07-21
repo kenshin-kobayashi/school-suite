@@ -7,55 +7,64 @@ import {
 } from "react";
 
 import Select from "@/components/common/Select";
+
 import {
   ScheduleGrid,
   ScheduleHeader,
   ScheduleModeToggle,
   ScheduleToolbar,
-  type ScheduleColumn,
   type ScheduleMode,
 } from "@/components/schedule";
+
 import LessonDialog from "@/components/schedule/dialog/LessonDialog";
-import type { LessonFormValues } from "@/components/schedule/dialog/LessonForm";
+
 import CourseWeekSelect from "@/components/schedule/layout/CourseWeekSelect";
 
-import {
-  calculateAcademicYear,
-  getAcademicYear,
-} from "@/lib/firebase/academicYear";
-import type { Student } from "@/lib/firebase/students";
-import type { Teacher } from "@/lib/firebase/teachers";
-import { defaultScheduleSettings } from "@/lib/schedule/defaultScheduleSettings";
-import { createSchedulePeriods } from "@/lib/schedule/periods";
-import { createCourseWeeks } from "@/lib/schedule/week";
+import StudentScheduleDialog, {
+  type StudentScheduleValues,
+} from "@/components/schedule/student-schedule/StudentScheduleDialog";
 
-import type { Lesson } from "@/types/lesson";
-import type { Weekday } from "@/types/schedule";
-import type { ScheduleCellPosition } from "@/types/schedule-cell";
+import TeacherScheduleDialog, {
+  type TeacherScheduleValues,
+} from "@/components/schedule/teacher-schedule/TeacherScheduleDialog";
+
+import {
+  isRegularLessonPreview,
+  useCourseLessons,
+} from "@/hooks/schedule/useCourseLessons";
+
+import {
+  useCourseSchedule,
+} from "@/hooks/schedule/useCourseSchedule";
+
+import {
+  useLessonDialog,
+} from "@/hooks/schedule/useLessonDialog";
+
+import {
+  useScheduleData,
+} from "@/hooks/schedule/useScheduleData";
+
+import {
+  saveStudentSchedules,
+} from "@/lib/firebase/studentSchedules";
+
+import {
+  saveTeacherSchedules,
+} from "@/lib/firebase/teacherSchedules";
+
+import type {
+  Lesson,
+} from "@/types/lesson";
+
+import type {
+  ScheduleCellPosition,
+} from "@/types/schedule-cell";
+
 import {
   COURSE_TYPE_LABELS,
   type CourseType,
 } from "@/types/schedule-settings";
-
-const weekdayLabels: Record<Weekday, string> = {
-  monday: "月曜日",
-  tuesday: "火曜日",
-  wednesday: "水曜日",
-  thursday: "木曜日",
-  friday: "金曜日",
-  saturday: "土曜日",
-  sunday: "日曜日",
-};
-
-const weekdayByDayNumber: Record<number, Weekday> = {
-  0: "sunday",
-  1: "monday",
-  2: "tuesday",
-  3: "wednesday",
-  4: "thursday",
-  5: "friday",
-  6: "saturday",
-};
 
 const courseTypeOptions: CourseType[] = [
   "spring",
@@ -64,649 +73,404 @@ const courseTypeOptions: CourseType[] = [
   "other",
 ];
 
-const sampleTeachers: Teacher[] = [
-  {
-    id: "teacher-1",
-    teacherNumber: "T0001",
-    name: "田中",
-    furigana: "たなか",
-    status: "在籍",
-    subjects: [
-      {
-        id: "teacher-1-english",
-        subject: "英語",
-        grades: [
-          "小学6年",
-          "中学1年",
-          "中学2年",
-          "中学3年",
-        ],
-      },
-    ],
-  },
-  {
-    id: "teacher-2",
-    teacherNumber: "T0002",
-    name: "山田",
-    furigana: "やまだ",
-    status: "在籍",
-    subjects: [
-      {
-        id: "teacher-2-math",
-        subject: "数学",
-        grades: [
-          "中学1年",
-          "中学2年",
-          "中学3年",
-        ],
-      },
-      {
-        id: "teacher-2-japanese",
-        subject: "国語",
-        grades: [
-          "中学1年",
-          "中学2年",
-          "中学3年",
-        ],
-      },
-    ],
-  },
-  {
-    id: "teacher-3",
-    teacherNumber: "T0003",
-    name: "高橋",
-    furigana: "たかはし",
-    status: "在籍",
-    subjects: [
-      {
-        id: "teacher-3-english",
-        subject: "英語",
-        grades: [
-          "中学1年",
-          "中学2年",
-          "中学3年",
-        ],
-      },
-      {
-        id: "teacher-3-science",
-        subject: "理科",
-        grades: [
-          "中学1年",
-          "中学2年",
-          "中学3年",
-        ],
-      },
-    ],
-  },
-  {
-    id: "teacher-4",
-    teacherNumber: "T0004",
-    name: "佐々木",
-    furigana: "ささき",
-    status: "在籍",
-    subjects: [
-      {
-        id: "teacher-4-math",
-        subject: "数学",
-        grades: [
-          "中学1年",
-          "中学2年",
-          "中学3年",
-        ],
-      },
-    ],
-  },
-];
-
-const sampleStudents: Student[] = [
-  {
-    id: "student-1",
-    studentNumber: "S0001",
-    name: "佐藤 花子",
-    furigana: "さとう はなこ",
-    grade: "中学1年",
-    school: "第一中学校",
-    status: "在籍",
-    unavailableTeacherIds: [],
-    maxStudentsPerLesson: 2,
-    firstPreferredTeacherId: "teacher-1",
-    secondPreferredTeacherId: "",
-  },
-  {
-    id: "student-2",
-    studentNumber: "S0002",
-    name: "鈴木 太郎",
-    furigana: "すずき たろう",
-    grade: "中学2年",
-    school: "第二中学校",
-    status: "在籍",
-    unavailableTeacherIds: [],
-    maxStudentsPerLesson: 2,
-    firstPreferredTeacherId: "teacher-2",
-    secondPreferredTeacherId: "",
-  },
-  {
-    id: "student-3",
-    studentNumber: "S0003",
-    name: "伊藤 健",
-    furigana: "いとう けん",
-    grade: "中学3年",
-    school: "第三中学校",
-    status: "在籍",
-    unavailableTeacherIds: [],
-    maxStudentsPerLesson: 2,
-    firstPreferredTeacherId: "teacher-2",
-    secondPreferredTeacherId: "",
-  },
-  {
-    id: "student-4",
-    studentNumber: "S0004",
-    name: "中村 美咲",
-    furigana: "なかむら みさき",
-    grade: "中学2年",
-    school: "第一中学校",
-    status: "在籍",
-    unavailableTeacherIds: [],
-    maxStudentsPerLesson: 2,
-    firstPreferredTeacherId: "teacher-3",
-    secondPreferredTeacherId: "teacher-1",
-  },
-  {
-    id: "student-5",
-    studentNumber: "S0005",
-    name: "小林 翔",
-    furigana: "こばやし しょう",
-    grade: "中学1年",
-    school: "第二中学校",
-    status: "在籍",
-    unavailableTeacherIds: [],
-    maxStudentsPerLesson: 2,
-    firstPreferredTeacherId: "teacher-3",
-    secondPreferredTeacherId: "",
-  },
-  {
-    id: "student-6",
-    studentNumber: "S0006",
-    name: "加藤 悠斗",
-    furigana: "かとう ゆうと",
-    grade: "中学3年",
-    school: "第三中学校",
-    status: "在籍",
-    unavailableTeacherIds: [],
-    maxStudentsPerLesson: 1,
-    firstPreferredTeacherId: "teacher-4",
-    secondPreferredTeacherId: "",
-  },
-];
-
-function parseDate(dateString: string): Date {
-  const [year, month, day] = dateString
-    .split("-")
-    .map(Number);
-
-  return new Date(year, month - 1, day);
-}
-
-function createDateLabel(
-  dateString: string,
-): string {
-  const date = parseDate(dateString);
-
-  return `${
-    date.getMonth() + 1
-  }月${date.getDate()}日`;
-}
-
-function createDateSubLabel(
-  dateString: string,
-): string {
-  const date = parseDate(dateString);
-  const weekday =
-    weekdayByDayNumber[date.getDay()];
-
-  return weekdayLabels[weekday];
-}
-
-function createRegularColumns(): ScheduleColumn[] {
-  return defaultScheduleSettings.regular.enabledWeekdays.map(
-    (weekday) => ({
-      id: weekday,
-      label: weekdayLabels[weekday],
-    }),
-  );
-}
-
-function createSampleLessons(
-  academicYear: number,
-): Record<string, Lesson[]> {
-  return {
-    "monday-period-1": [
-      {
-        id: "lesson-1",
-        academicYear,
-        scheduleMode: "regular",
-        weekday: "monday",
-        periodNumber: 1,
-        teacherId: "teacher-1",
-        teacherNumber: "T0001",
-        teacherName: "田中先生",
-        students: [
-          {
-            studentId: "student-1",
-            studentNumber: "S0001",
-            studentName: "佐藤 花子",
-            grade: "中学1年",
-            subject: "英語",
-          },
-          {
-            studentId: "student-2",
-            studentNumber: "S0002",
-            studentName: "鈴木 太郎",
-            grade: "中学2年",
-            subject: "数学",
-          },
-        ],
-        status: "scheduled",
-        source: "manual",
-      },
-      {
-        id: "lesson-2",
-        academicYear,
-        scheduleMode: "regular",
-        weekday: "monday",
-        periodNumber: 1,
-        teacherId: "teacher-2",
-        teacherNumber: "T0002",
-        teacherName: "山田先生",
-        students: [
-          {
-            studentId: "student-3",
-            studentNumber: "S0003",
-            studentName: "伊藤 健",
-            grade: "中学3年",
-            subject: "国語",
-          },
-        ],
-        status: "scheduled",
-        source: "manual",
-      },
-    ],
-
-    "wednesday-period-2": [
-      {
-        id: "lesson-3",
-        academicYear,
-        scheduleMode: "regular",
-        weekday: "wednesday",
-        periodNumber: 2,
-        teacherId: "teacher-3",
-        teacherNumber: "T0003",
-        teacherName: "高橋先生",
-        students: [
-          {
-            studentId: "student-4",
-            studentNumber: "S0004",
-            studentName: "中村 美咲",
-            grade: "中学2年",
-            subject: "英語",
-          },
-          {
-            studentId: "student-5",
-            studentNumber: "S0005",
-            studentName: "小林 翔",
-            grade: "中学1年",
-            subject: "理科",
-          },
-        ],
-        status: "scheduled",
-        source: "manual",
-      },
-    ],
-
-    "friday-period-4": [
-      {
-        id: "lesson-4",
-        academicYear,
-        scheduleMode: "regular",
-        weekday: "friday",
-        periodNumber: 4,
-        teacherId: "teacher-4",
-        teacherNumber: "T0004",
-        teacherName: "佐々木先生",
-        students: [
-          {
-            studentId: "student-6",
-            studentNumber: "S0006",
-            studentName: "加藤 悠斗",
-            grade: "中学3年",
-            subject: "数学",
-          },
-        ],
-        status: "scheduled",
-        source: "manual",
-      },
-    ],
-
-    "2026-07-21-period-1": [
-      {
-        id: "course-lesson-1",
-        academicYear,
-        scheduleMode: "course",
-        date: "2026-07-21",
-        periodNumber: 1,
-        teacherId: "teacher-1",
-        teacherNumber: "T0001",
-        teacherName: "田中先生",
-        students: [
-          {
-            studentId: "student-1",
-            studentNumber: "S0001",
-            studentName: "佐藤 花子",
-            grade: "中学1年",
-            subject: "英語",
-          },
-        ],
-        status: "scheduled",
-        source: "manual",
-      },
-    ],
-
-    "2026-07-23-period-3": [
-      {
-        id: "course-lesson-2",
-        academicYear,
-        scheduleMode: "course",
-        date: "2026-07-23",
-        periodNumber: 3,
-        teacherId: "teacher-2",
-        teacherNumber: "T0002",
-        teacherName: "山田先生",
-        students: [
-          {
-            studentId: "student-2",
-            studentNumber: "S0002",
-            studentName: "鈴木 太郎",
-            grade: "中学2年",
-            subject: "数学",
-          },
-          {
-            studentId: "student-3",
-            studentNumber: "S0003",
-            studentName: "伊藤 健",
-            grade: "中学3年",
-            subject: "国語",
-          },
-        ],
-        status: "scheduled",
-        source: "manual",
-      },
-    ],
-  };
-}
-
 export default function SchedulePage() {
-  const [mode, setMode] =
-    useState<ScheduleMode>("regular");
-
-  const [
+  const {
     academicYear,
-    setAcademicYear,
-  ] = useState(() =>
-    calculateAcademicYear(),
-  );
+    scheduleSettings,
+    teachers,
+    students,
+    classrooms,
+    lessonsByCell,
+    studentSchedulesByCourse,
+    teacherSchedulesByCourse,
+    isScheduleLoading,
+    scheduleError,
+    setLessonsByCell,
+    setStudentSchedulesByCourse,
+    setTeacherSchedulesByCourse,
+    setScheduleError,
+    loadStudentSchedule,
+    loadTeacherSchedule,
+  } = useScheduleData();
 
   const [
-    isAcademicYearLoading,
-    setIsAcademicYearLoading,
-  ] = useState(true);
+    mode,
+    setMode,
+  ] = useState<ScheduleMode>(
+    "regular",
+  );
 
   const [
     selectedCourseType,
     setSelectedCourseType,
-  ] = useState<CourseType>("summer");
+  ] = useState<CourseType>(
+    "summer",
+  );
 
   const [
-    selectedCell,
-    setSelectedCell,
-  ] =
-    useState<ScheduleCellPosition | null>(
-      null,
-    );
-
-  const [
-    dialogOpen,
-    setDialogOpen,
+    studentScheduleDialogOpen,
+    setStudentScheduleDialogOpen,
   ] = useState(false);
 
   const [
-    selectedWeekId,
-    setSelectedWeekId,
-  ] = useState("");
+    teacherScheduleDialogOpen,
+    setTeacherScheduleDialogOpen,
+  ] = useState(false);
 
   useEffect(() => {
-    let active = true;
-
-    async function loadAcademicYear() {
-      try {
-        const savedAcademicYear =
-          await getAcademicYear();
-
-        if (active) {
-          setAcademicYear(savedAcademicYear);
-        }
-      } catch (error) {
-        console.error(
-          "年度の読み込みに失敗しました。",
-          error,
-        );
-      } finally {
-        if (active) {
-          setIsAcademicYearLoading(false);
-        }
-      }
+    if (isScheduleLoading) {
+      return;
     }
 
-    void loadAcademicYear();
-
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  const selectedCourseSettings =
-    useMemo(
-      () =>
-        defaultScheduleSettings.courses[
-          selectedCourseType
-        ],
-      [selectedCourseType],
+    void loadStudentSchedule(
+      selectedCourseType,
     );
 
-  const regularColumns = useMemo(
-    () => createRegularColumns(),
-    [],
-  );
-
-  const sampleLessons = useMemo(
-    () => createSampleLessons(academicYear),
-    [academicYear],
-  );
-
-  const courseWeeks = useMemo(() => {
-    const {
-      startDate,
-      endDate,
-      enabledWeekdays,
-    } = selectedCourseSettings;
-
-    if (!startDate || !endDate) {
-      return [];
-    }
-
-    return createCourseWeeks(
-      startDate,
-      endDate,
-      enabledWeekdays,
-    );
-  }, [selectedCourseSettings]);
-
-  useEffect(() => {
-    setSelectedWeekId(
-      courseWeeks[0]?.id ?? "",
-    );
-  }, [courseWeeks]);
-
-  const selectedWeek = useMemo(
-    () =>
-      courseWeeks.find(
-        (week) =>
-          week.id === selectedWeekId,
-      ) ??
-      courseWeeks[0] ??
-      null,
-    [courseWeeks, selectedWeekId],
-  );
-
-  const courseColumns =
-    useMemo<ScheduleColumn[]>(
-      () => {
-        if (!selectedWeek) {
-          return [];
-        }
-
-        return selectedWeek.dates.map(
-          (dateString) => ({
-            id: dateString,
-            label:
-              createDateLabel(dateString),
-            subLabel:
-              createDateSubLabel(
-                dateString,
-              ),
-          }),
-        );
-      },
-      [selectedWeek],
-    );
-
-  const columns = useMemo(
-    () =>
-      mode === "regular"
-        ? regularColumns
-        : courseColumns,
-    [
-      courseColumns,
-      mode,
-      regularColumns,
-    ],
-  );
-
-  const periods = useMemo(() => {
-    const periodSettings =
-      mode === "regular"
-        ? defaultScheduleSettings.regular
-            .periods
-        : selectedCourseSettings.periods;
-
-    return createSchedulePeriods(
-      periodSettings,
+    void loadTeacherSchedule(
+      selectedCourseType,
     );
   }, [
-    mode,
-    selectedCourseSettings,
+    isScheduleLoading,
+    loadStudentSchedule,
+    loadTeacherSchedule,
+    selectedCourseType,
   ]);
+
+  const {
+    selectedCourseSettings,
+    holidayDateSet,
+    courseWeeks,
+    courseDates,
+    coursePeriods,
+    selectedWeek,
+    columns,
+    periods,
+    selectedWeekId,
+    setSelectedWeekId,
+  } = useCourseSchedule({
+    mode,
+    selectedCourseType,
+    scheduleSettings,
+  });
+
+  const {
+    displayLessonsByCell,
+  } = useCourseLessons({
+    mode,
+    selectedCourseType,
+    scheduleSettings,
+    courseDates,
+    lessonsByCell,
+  });
+
+  const activeTeachers = useMemo(
+    () =>
+      teachers.filter(
+        (teacher) =>
+          teacher.status ===
+          "在籍",
+      ),
+    [teachers],
+  );
+
+  const activeStudents = useMemo(
+    () =>
+      students.filter(
+        (student) =>
+          student.status ===
+          "在籍",
+      ),
+    [students],
+  );
+
+  const sortedClassrooms = useMemo(
+    () =>
+      [...classrooms].sort(
+        (
+          classroomA,
+          classroomB,
+        ) =>
+          classroomA.name.localeCompare(
+            classroomB.name,
+            "ja",
+          ),
+      ),
+    [classrooms],
+  );
+
+  const {
+    lessonDialogOpen,
+    selectedCell,
+    selectedLesson,
+    lessonInitialValues,
+    handleAddLesson,
+    handleCellClick,
+    handleLessonClick,
+    handleCloseLessonDialog,
+    handleSubmitLesson,
+    handleDeleteLesson,
+  } = useLessonDialog({
+    academicYear,
+
+    mode,
+
+    columns,
+
+    periods,
+
+    holidayDateSet,
+
+    lessonsByCell,
+
+    setLessonsByCell,
+
+    setScheduleError,
+
+    onBeforeOpen: () => {
+      setStudentScheduleDialogOpen(
+        false,
+      );
+
+      setTeacherScheduleDialogOpen(
+        false,
+      );
+    },
+  });
+
+  function closeScheduleDialogs() {
+    handleCloseLessonDialog();
+
+    setStudentScheduleDialogOpen(
+      false,
+    );
+
+    setTeacherScheduleDialogOpen(
+      false,
+    );
+  }
 
   function handleModeChange(
     nextMode: ScheduleMode,
   ) {
     setMode(nextMode);
-    setSelectedCell(null);
-    setDialogOpen(false);
+
+    closeScheduleDialogs();
   }
 
   function handleCourseTypeChange(
     value: string,
   ) {
+    const nextCourseType =
+      courseTypeOptions.find(
+        (courseType) =>
+          courseType === value,
+      );
+
+    if (!nextCourseType) {
+      return;
+    }
+
     setSelectedCourseType(
-      value as CourseType,
+      nextCourseType,
     );
 
-    setSelectedCell(null);
-    setDialogOpen(false);
+    closeScheduleDialogs();
   }
 
-  function handleCellClick(
+  function handleDisplayedLessonClick(
     position: ScheduleCellPosition,
+    lesson: Lesson,
   ) {
-    setSelectedCell(position);
-    setDialogOpen(true);
-  }
-
-  function handleCloseLessonDialog() {
-    setDialogOpen(false);
-    setSelectedCell(null);
-  }
-
-  function handleAddLesson() {
-    const firstColumn = columns[0];
-    const firstPeriod = periods[0];
-
-    if (!firstColumn || !firstPeriod) {
+    if (
+      isRegularLessonPreview(
+        lesson,
+      )
+    ) {
       return;
     }
 
-    setSelectedCell({
-      columnId: firstColumn.id,
-      periodId: firstPeriod.id,
-    });
-
-    setDialogOpen(true);
-  }
-
-  async function handleSubmitLesson(
-    values: LessonFormValues,
-  ) {
-    if (!selectedCell) {
-      return;
-    }
-
-    console.log("授業登録", {
-      academicYear,
-      scheduleMode: mode,
-      courseType:
-        mode === "course"
-          ? selectedCourseType
-          : undefined,
-      position: selectedCell,
-      ...values,
-    });
-
-    handleCloseLessonDialog();
+    handleLessonClick(
+      position,
+      lesson,
+    );
   }
 
   function handleCreateOrRebuildWithAI() {
-    console.log("AIで作成・組み直し", {
-      academicYear,
-      scheduleMode: mode,
-      courseType:
-        mode === "course"
-          ? selectedCourseType
-          : undefined,
-    });
+    console.log(
+      "AIで作成・組み直し",
+      {
+        academicYear,
+
+        scheduleMode:
+          mode,
+
+        courseType:
+          mode === "course"
+            ? selectedCourseType
+            : undefined,
+
+        scheduleSettings,
+
+        selectedCourseSettings:
+          mode === "course"
+            ? selectedCourseSettings
+            : undefined,
+
+        schoolHolidays:
+          scheduleSettings
+            .schoolHolidays,
+
+        availableCourseDates:
+          mode === "course"
+            ? courseDates
+            : undefined,
+
+        classrooms:
+          sortedClassrooms,
+
+        displayedLessons:
+          displayLessonsByCell,
+
+        studentSchedules:
+          mode === "course"
+            ? studentSchedulesByCourse[
+                selectedCourseType
+              ]
+            : undefined,
+
+        teacherSchedules:
+          mode === "course"
+            ? teacherSchedulesByCourse[
+                selectedCourseType
+              ]
+            : undefined,
+      },
+    );
   }
 
-  function handleOpenSettings() {
-    console.log("日程設定", {
-      academicYear,
-      scheduleMode: mode,
-      courseType:
-        mode === "course"
-          ? selectedCourseType
-          : undefined,
-    });
+  function handleOpenStudentSchedule() {
+    if (mode !== "course") {
+      return;
+    }
+
+    setScheduleError("");
+
+    handleCloseLessonDialog();
+
+    setTeacherScheduleDialogOpen(
+      false,
+    );
+
+    setStudentScheduleDialogOpen(
+      true,
+    );
   }
 
-  if (isAcademicYearLoading) {
+  function handleCloseStudentSchedule() {
+    setStudentScheduleDialogOpen(
+      false,
+    );
+  }
+
+  async function handleSaveStudentSchedule(
+    values: StudentScheduleValues,
+  ) {
+    try {
+      setScheduleError("");
+
+      await saveStudentSchedules(
+        academicYear,
+        selectedCourseType,
+        values,
+      );
+
+      setStudentSchedulesByCourse(
+        (currentSchedules) => ({
+          ...currentSchedules,
+
+          [selectedCourseType]:
+            values,
+        }),
+      );
+
+      setStudentScheduleDialogOpen(
+        false,
+      );
+    } catch (error) {
+      console.error(
+        "生徒日程の保存に失敗しました。",
+        error,
+      );
+
+      setScheduleError(
+        "生徒日程の保存に失敗しました。時間をおいて、もう一度お試しください。",
+      );
+    }
+  }
+
+  function handleOpenTeacherSchedule() {
+    if (mode !== "course") {
+      return;
+    }
+
+    setScheduleError("");
+
+    handleCloseLessonDialog();
+
+    setStudentScheduleDialogOpen(
+      false,
+    );
+
+    setTeacherScheduleDialogOpen(
+      true,
+    );
+  }
+
+  function handleCloseTeacherSchedule() {
+    setTeacherScheduleDialogOpen(
+      false,
+    );
+  }
+
+  async function handleSaveTeacherSchedule(
+    values: TeacherScheduleValues,
+  ) {
+    try {
+      setScheduleError("");
+
+      await saveTeacherSchedules(
+        academicYear,
+        selectedCourseType,
+        values,
+      );
+
+      setTeacherSchedulesByCourse(
+        (currentSchedules) => ({
+          ...currentSchedules,
+
+          [selectedCourseType]:
+            values,
+        }),
+      );
+
+      setTeacherScheduleDialogOpen(
+        false,
+      );
+    } catch (error) {
+      console.error(
+        "講師日程の保存に失敗しました。",
+        error,
+      );
+
+      setScheduleError(
+        "講師日程の保存に失敗しました。時間をおいて、もう一度お試しください。",
+      );
+
+      throw error;
+    }
+  }
+
+  if (isScheduleLoading) {
     return (
       <main className="min-w-0">
         <div className="mx-auto w-full max-w-[1800px]">
@@ -726,7 +490,9 @@ export default function SchedulePage() {
         <div className="mx-auto w-full max-w-[1800px] space-y-6">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
-              <ScheduleHeader mode={mode} />
+              <ScheduleHeader
+                mode={mode}
+              />
 
               <p className="mt-2 text-sm font-medium text-zinc-500">
                 {academicYear}年度
@@ -735,11 +501,21 @@ export default function SchedulePage() {
 
             <ScheduleModeToggle
               value={mode}
-              onChange={handleModeChange}
+              onChange={
+                handleModeChange
+              }
             />
           </div>
 
-          {mode === "course" && (
+          {scheduleError ? (
+            <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3">
+              <p className="text-sm font-medium text-red-700">
+                {scheduleError}
+              </p>
+            </div>
+          ) : null}
+
+          {mode === "course" ? (
             <div className="w-full rounded-3xl border border-zinc-200 bg-white p-5 shadow-sm">
               <div className="max-w-xs">
                 <Select
@@ -747,7 +523,9 @@ export default function SchedulePage() {
                   value={
                     selectedCourseType
                   }
-                  onChange={(event) =>
+                  onChange={(
+                    event,
+                  ) =>
                     handleCourseTypeChange(
                       event.target.value,
                     )
@@ -756,8 +534,12 @@ export default function SchedulePage() {
                   {courseTypeOptions.map(
                     (courseType) => (
                       <option
-                        key={courseType}
-                        value={courseType}
+                        key={
+                          courseType
+                        }
+                        value={
+                          courseType
+                        }
                       >
                         {
                           COURSE_TYPE_LABELS[
@@ -769,33 +551,62 @@ export default function SchedulePage() {
                   )}
                 </Select>
               </div>
+
+              <div className="mt-4 flex items-center gap-2 border-t border-zinc-100 pt-4">
+                <span
+                  className={[
+                    "inline-flex h-2.5 w-2.5 rounded-full",
+
+                    selectedCourseSettings
+                      .showRegularLessons
+                      ? "bg-emerald-500"
+                      : "bg-zinc-300",
+                  ].join(" ")}
+                />
+
+                <p className="text-sm font-medium text-zinc-600">
+                  通常授業のコピー：
+
+                  <span className="ml-1 font-semibold text-zinc-900">
+                    {selectedCourseSettings
+                      .showRegularLessons
+                      ? "オン"
+                      : "オフ"}
+                  </span>
+                </p>
+              </div>
             </div>
-          )}
+          ) : null}
 
           <ScheduleToolbar
+            scheduleMode={mode}
             onAddLesson={
               handleAddLesson
             }
             onCreateOrRebuildWithAI={
               handleCreateOrRebuildWithAI
             }
-            onOpenSettings={
-              handleOpenSettings
+            onOpenStudentSchedule={
+              handleOpenStudentSchedule
+            }
+            onOpenTeacherSchedule={
+              handleOpenTeacherSchedule
             }
           />
 
           {mode === "course" &&
-            courseWeeks.length > 0 && (
-              <CourseWeekSelect
-                weeks={courseWeeks}
-                value={
-                  selectedWeek?.id ?? ""
-                }
-                onChange={
-                  setSelectedWeekId
-                }
-              />
-            )}
+          courseWeeks.length > 0 ? (
+            <CourseWeekSelect
+              weeks={courseWeeks}
+              value={
+                selectedWeek?.id ??
+                ""
+              }
+              onChange={
+                setSelectedWeekId
+              }
+            />
+          ) : null}
 
           {mode === "course" &&
           courseWeeks.length === 0 ? (
@@ -819,10 +630,13 @@ export default function SchedulePage() {
               columns={columns}
               periods={periods}
               lessonsByCell={
-                sampleLessons
+                displayLessonsByCell
               }
               onCellClick={
                 handleCellClick
+              }
+              onLessonClick={
+                handleDisplayedLessonClick
               }
             />
           )}
@@ -830,16 +644,69 @@ export default function SchedulePage() {
       </main>
 
       <LessonDialog
-        open={dialogOpen}
+        open={lessonDialogOpen}
         position={selectedCell}
-        teachers={sampleTeachers}
-        students={sampleStudents}
-        mode="create"
+        teachers={activeTeachers}
+        students={activeStudents}
+        classrooms={sortedClassrooms}
+        initialValues={
+          lessonInitialValues
+        }
+        mode={
+          selectedLesson
+            ? "edit"
+            : "create"
+        }
         onClose={
           handleCloseLessonDialog
         }
         onSubmit={
           handleSubmitLesson
+        }
+        onDelete={
+          selectedLesson
+            ? handleDeleteLesson
+            : undefined
+        }
+      />
+
+      <StudentScheduleDialog
+        open={
+          studentScheduleDialogOpen
+        }
+        students={activeStudents}
+        dates={courseDates}
+        periods={coursePeriods}
+        initialValues={
+          studentSchedulesByCourse[
+            selectedCourseType
+          ]
+        }
+        onClose={
+          handleCloseStudentSchedule
+        }
+        onSave={
+          handleSaveStudentSchedule
+        }
+      />
+
+      <TeacherScheduleDialog
+        open={
+          teacherScheduleDialogOpen
+        }
+        teachers={activeTeachers}
+        dates={courseDates}
+        periods={coursePeriods}
+        initialValues={
+          teacherSchedulesByCourse[
+            selectedCourseType
+          ]
+        }
+        onClose={
+          handleCloseTeacherSchedule
+        }
+        onSave={
+          handleSaveTeacherSchedule
         }
       />
     </>

@@ -30,6 +30,11 @@ const menus: SettingsNavigationItem[] = [
     description: "授業で使用する教室",
   },
   {
+    id: "holidays",
+    label: "休塾日設定",
+    description: "休塾日・祝日・休校日",
+  },
+  {
     id: "academic-year",
     label: "年度更新",
     description: "新年度への更新処理",
@@ -60,9 +65,13 @@ export default function SettingsNavigation({
             <button
               key={menu.id}
               type="button"
-              onClick={() => onSelect(menu.id)}
+              onClick={() =>
+                onSelect(menu.id)
+              }
               aria-current={
-                isSelected ? "page" : undefined
+                isSelected
+                  ? "page"
+                  : undefined
               }
               className={[
                 "w-full rounded-xl px-4 py-3 text-left transition-colors",

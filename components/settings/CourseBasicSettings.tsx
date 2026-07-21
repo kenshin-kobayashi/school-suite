@@ -58,6 +58,14 @@ export default function CourseBasicSettings({
     });
   }
 
+  function handleShowRegularLessonsChange() {
+    onChange({
+      ...value,
+      showRegularLessons:
+        !value.showRegularLessons,
+    });
+  }
+
   return (
     <>
       <SettingSection
@@ -182,6 +190,64 @@ export default function CourseBasicSettings({
               </p>
             </div>
           )}
+      </SettingSection>
+
+      <SettingSection
+        title="通常授業のコピー"
+        description={`${COURSE_TYPE_LABELS[selectedCourseType]}の時間割に、通常授業を反映するか設定します。`}
+      >
+        <div className="flex items-center justify-between gap-5 rounded-2xl border border-zinc-200 bg-white px-5 py-4">
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-zinc-900">
+              通常授業をコピーする
+            </p>
+
+            <p className="mt-1 text-sm leading-6 text-zinc-500">
+              オンにすると、講習期間中の通常授業を
+              講習スケジュールへ反映します。
+            </p>
+          </div>
+
+          <button
+            type="button"
+            role="switch"
+            aria-checked={
+              value.showRegularLessons
+            }
+            aria-label="通常授業をコピーする"
+            onClick={
+              handleShowRegularLessonsChange
+            }
+            className={[
+              "relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-colors",
+              "focus:outline-none focus:ring-2 focus:ring-zinc-400 focus:ring-offset-2",
+              value.showRegularLessons
+                ? "bg-zinc-900"
+                : "bg-zinc-300",
+            ].join(" ")}
+          >
+            <span
+              className={[
+                "inline-block h-5 w-5 rounded-full bg-white shadow-sm transition-transform",
+                value.showRegularLessons
+                  ? "translate-x-6"
+                  : "translate-x-1",
+              ].join(" ")}
+            />
+          </button>
+        </div>
+
+        <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3">
+          <p className="text-xs font-semibold text-zinc-500">
+            現在の設定
+          </p>
+
+          <p className="mt-1 text-sm font-bold text-zinc-900">
+            {value.showRegularLessons
+              ? "通常授業をコピーする"
+              : "通常授業をコピーしない"}
+          </p>
+        </div>
       </SettingSection>
     </>
   );
