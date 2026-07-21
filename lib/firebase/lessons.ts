@@ -27,6 +27,7 @@ import {
   Timestamp,
   updateDoc,
   where,
+  writeBatch,
 } from "firebase/firestore";
 
 const lessonCollection = collection(
@@ -43,6 +44,8 @@ const weekdays: Weekday[] = [
   "saturday",
   "sunday",
 ];
+
+const maximumBatchOperations = 450;
 
 function isRecord(
   value: unknown,
@@ -532,10 +535,116 @@ function createLessonDocumentData(
   };
 }
 
+function createChunks<T>(
+  values: T[],
+  size: number,
+): T[][] {
+  const chunks: T[][] = [];
+
+  for (
+    let index = 0;
+    index < values.length;
+    index += size
+  ) {
+    chunks.push(
+      values.slice(
+        index,
+        index + size,
+      ),
+    );
+  }
+
+  return chunks;
+}
+
+function validateCourseReplacement(
+  academicYear: number,
+  courseDates: string[],
+  lessons: LessonWriteData[],
+): Set<string> {
+  if (
+    !Number.isInteger(
+      academicYear,
+    )
+  ) {
+    throw new Error(
+      "年度が正しく設定されていません。",
+    );
+  }
+
+  const courseDateSet =
+    new Set(
+      courseDates
+        .map((date) =>
+          date.trim(),
+        )
+        .filter(Boolean),
+    );
+
+  if (courseDateSet.size === 0) {
+    throw new Error(
+      "講習期間が設定されていません。",
+    );
+  }
+
+  for (const lesson of lessons) {
+    if (
+      lesson.academicYear !==
+      academicYear
+    ) {
+      throw new Error(
+        "AI授業の年度が一致していません。",
+      );
+    }
+
+    if (
+      lesson.scheduleMode !==
+      "course"
+    ) {
+      throw new Error(
+        "通常授業をAI講習授業として保存することはできません。",
+      );
+    }
+
+    if (lesson.source !== "ai") {
+      throw new Error(
+        "AI授業の作成元が正しく設定されていません。",
+      );
+    }
+
+    const lessonDate =
+      lesson.date?.trim() ||
+      lesson.position.columnId.trim();
+
+    if (
+      !courseDateSet.has(
+        lessonDate,
+      )
+    ) {
+      throw new Error(
+        `講習期間外の授業が含まれています。日付: ${lessonDate}`,
+      );
+    }
+
+    if (
+      lesson.position.columnId !==
+      lessonDate
+    ) {
+      throw new Error(
+        `授業の日付と配置セルが一致していません。日付: ${lessonDate}`,
+      );
+    }
+
+    createLessonDocumentData(
+      lesson,
+    );
+  }
+
+  return courseDateSet;
+}
+
 /**
  * 授業をFirestoreへ追加します。
- *
- * 追加したFirestoreドキュメントのIDを返します。
  */
 export const addLesson = async (
   lesson: LessonWriteData,
@@ -562,9 +671,6 @@ export const addLesson = async (
 
 /**
  * 授業一覧を取得します。
- *
- * academicYearを指定した場合は、
- * 指定年度の授業だけを取得します。
  */
 export const getLessons = async (
   academicYear?: number,
@@ -678,6 +784,151 @@ export const deleteLesson = async (
       lessonId,
     ),
   );
+};
+
+/**
+ * 指定した講習期間内の既存AI授業を削除し、
+ * 新しいAI授業へ置き換えます。
+ *
+ * 手動作成された講習授業は削除しません。
+ */
+export const replaceCourseLessons = async (
+  academicYear: number,
+  courseDates: string[],
+  lessons: LessonWriteData[],
+): Promise<string[]> => {
+  const courseDateSet =
+    validateCourseReplacement(
+      academicYear,
+      courseDates,
+      lessons,
+    );
+
+  const existingLessonsQuery =
+    query(
+      lessonCollection,
+      where(
+        "academicYear",
+        "==",
+        academicYear,
+      ),
+    );
+
+  const existingSnapshot =
+    await getDocs(
+      existingLessonsQuery,
+    );
+
+  const existingAILessonReferences =
+    existingSnapshot.docs
+      .filter((lessonDocument) => {
+        const data =
+          lessonDocument.data();
+
+        const scheduleMode =
+          normalizeScheduleMode(
+            data.scheduleMode,
+          );
+
+        const source =
+          normalizeLessonSource(
+            data.source,
+          );
+
+        const position =
+          createPositionFromLessonData(
+            data,
+          );
+
+        const date =
+          normalizeString(
+            data.date,
+          ).trim() ||
+          position?.columnId ||
+          "";
+
+        return (
+          scheduleMode === "course" &&
+          source === "ai" &&
+          courseDateSet.has(date)
+        );
+      })
+      .map(
+        (lessonDocument) =>
+          lessonDocument.ref,
+      );
+
+  const deleteChunks =
+    createChunks(
+      existingAILessonReferences,
+      maximumBatchOperations,
+    );
+
+  for (
+    const references of
+    deleteChunks
+  ) {
+    const batch =
+      writeBatch(db);
+
+    for (
+      const reference of
+      references
+    ) {
+      batch.delete(reference);
+    }
+
+    await batch.commit();
+  }
+
+  const createdLessonIds: string[] =
+    [];
+
+  const lessonChunks =
+    createChunks(
+      lessons,
+      maximumBatchOperations,
+    );
+
+  for (
+    const lessonChunk of
+    lessonChunks
+  ) {
+    const batch =
+      writeBatch(db);
+
+    for (
+      const lesson of
+      lessonChunk
+    ) {
+      const lessonReference =
+        doc(lessonCollection);
+
+      const lessonData =
+        createLessonDocumentData(
+          lesson,
+        );
+
+      batch.set(
+        lessonReference,
+        {
+          ...lessonData,
+          createdAt:
+            serverTimestamp(),
+          updatedAt:
+            serverTimestamp(),
+        },
+      );
+
+      createdLessonIds.push(
+        lessonReference.id,
+      );
+    }
+
+    await batch.commit();
+  }
+
+  return createdLessonIds;
 };
 
 /**
