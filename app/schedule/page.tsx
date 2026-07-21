@@ -585,15 +585,17 @@ export default function SchedulePage() {
             </div>
           ) : null}
 
-          <AIScheduleResultReport
-            result={
-              aiScheduleResult
-            }
-            aiWeights={
-              selectedCourseSettings
-                .aiWeights
-            }
-          />
+          {mode === "course" ? (
+  <AIScheduleResultReport
+    result={
+      aiScheduleResult
+    }
+    aiWeights={
+      selectedCourseSettings
+        .aiWeights
+    }
+  />
+) : null}
 
           {mode === "course" ? (
             <div className="w-full rounded-3xl border border-zinc-200 bg-white p-5 shadow-sm">

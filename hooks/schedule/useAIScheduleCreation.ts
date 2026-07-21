@@ -3,6 +3,7 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useState,
   type Dispatch,
   type SetStateAction,
@@ -92,6 +93,20 @@ type UseAIScheduleCreationProps = {
   closeScheduleDialogs: () => void;
 };
 
+const AI_RESULT_STORAGE_PREFIX =
+  "school-suite-ai-schedule-result";
+
+function createAIResultStorageKey(
+  academicYear: number,
+  courseType: CourseType,
+): string {
+  return [
+    AI_RESULT_STORAGE_PREFIX,
+    academicYear,
+    courseType,
+  ].join(":");
+}
+
 function getErrorMessage(
   error: unknown,
 ): string {
@@ -117,6 +132,118 @@ function calculateUnassignedCount(
         .remainingLessonCount,
     0,
   );
+}
+
+function isAISchedulerResult(
+  value: unknown,
+): value is AISchedulerResult {
+  if (
+    typeof value !== "object" ||
+    value === null
+  ) {
+    return false;
+  }
+
+  const result =
+    value as Partial<AISchedulerResult>;
+
+  return (
+    Array.isArray(result.lessons) &&
+    Array.isArray(
+      result.unassignedLessons,
+    ) &&
+    typeof result.assignedLessonCount ===
+      "number" &&
+    typeof result.requestedLessonCount ===
+      "number" &&
+    typeof result.placementRate ===
+      "number" &&
+    typeof result.score === "object" &&
+    result.score !== null
+  );
+}
+
+function loadStoredAIScheduleResult(
+  storageKey: string,
+): AISchedulerResult | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  try {
+    const storedValue =
+      window.localStorage.getItem(
+        storageKey,
+      );
+
+    if (!storedValue) {
+      return null;
+    }
+
+    const parsedValue: unknown =
+      JSON.parse(storedValue);
+
+    if (
+      !isAISchedulerResult(
+        parsedValue,
+      )
+    ) {
+      window.localStorage.removeItem(
+        storageKey,
+      );
+
+      return null;
+    }
+
+    return parsedValue;
+  } catch (error) {
+    console.error(
+      "保存済みのAI時間割結果を読み込めませんでした。",
+      error,
+    );
+
+    return null;
+  }
+}
+
+function saveAIScheduleResult(
+  storageKey: string,
+  result: AISchedulerResult,
+): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(
+      storageKey,
+      JSON.stringify(result),
+    );
+  } catch (error) {
+    console.error(
+      "AI時間割結果をブラウザへ保存できませんでした。",
+      error,
+    );
+  }
+}
+
+function removeStoredAIScheduleResult(
+  storageKey: string,
+): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.localStorage.removeItem(
+      storageKey,
+    );
+  } catch (error) {
+    console.error(
+      "保存済みのAI時間割結果を削除できませんでした。",
+      error,
+    );
+  }
 }
 
 export function useAIScheduleCreation({
@@ -145,6 +272,19 @@ export function useAIScheduleCreation({
     reset: resetAIScheduler,
   } = useAIScheduler();
 
+  const aiResultStorageKey =
+    useMemo(
+      () =>
+        createAIResultStorageKey(
+          academicYear,
+          courseType,
+        ),
+      [
+        academicYear,
+        courseType,
+      ],
+    );
+
   const [
     aiScheduleMessage,
     setAIScheduleMessage,
@@ -166,6 +306,23 @@ export function useAIScheduleCreation({
   const isAIProcessing =
     isGenerating ||
     isSavingGeneratedSchedule;
+
+  /*
+   * 年度または講習種別が変わったときに、
+   * 保存済みのAI時間割結果を復元します。
+   */
+  useEffect(() => {
+    const storedResult =
+      loadStoredAIScheduleResult(
+        aiResultStorageKey,
+      );
+
+    setAIScheduleResult(
+      storedResult,
+    );
+
+    setAIScheduleMessage("");
+  }, [aiResultStorageKey]);
 
   /*
    * AI計算部分は最大90%まで表示し、
@@ -195,12 +352,18 @@ export function useAIScheduleCreation({
     setScheduleError,
   ]);
 
+  /*
+   * AIの進行状態だけを初期化します。
+   *
+   * 保存済みのAI作成結果は削除しないため、
+   * 通常授業画面などへ移動して戻った後も
+   * 結果が残ります。
+   */
   const clearAIState =
     useCallback(() => {
       resetAIScheduler();
 
       setAIScheduleMessage("");
-      setAIScheduleResult(null);
 
       setIsSavingGeneratedSchedule(
         false,
@@ -212,10 +375,18 @@ export function useAIScheduleCreation({
       setAIScheduleMessage("");
     }, []);
 
+  /*
+   * 画面表示とブラウザ保存の両方から
+   * AI時間割結果を削除します。
+   */
   const clearAIScheduleResult =
     useCallback(() => {
       setAIScheduleResult(null);
-    }, []);
+
+      removeStoredAIScheduleResult(
+        aiResultStorageKey,
+      );
+    }, [aiResultStorageKey]);
 
   const createOrRebuildWithAI =
     useCallback(async () => {
@@ -226,7 +397,16 @@ export function useAIScheduleCreation({
       try {
         setScheduleError("");
         setAIScheduleMessage("");
+
+        /*
+         * 次回のAI時間割作成を開始したため、
+         * 前回の評価結果を削除します。
+         */
         setAIScheduleResult(null);
+
+        removeStoredAIScheduleResult(
+          aiResultStorageKey,
+        );
 
         setIsSavingGeneratedSchedule(
           false,
@@ -387,9 +567,14 @@ export function useAIScheduleCreation({
         );
 
         /*
-         * Firestoreへの保存まで成功した結果だけを
-         * 画面へ表示します。
+         * 授業のFirestore保存が成功した後に、
+         * AI評価結果をブラウザへ保存します。
          */
+        saveAIScheduleResult(
+          aiResultStorageKey,
+          generatedResult,
+        );
+
         setAIScheduleResult(
           generatedResult,
         );
@@ -415,6 +600,7 @@ export function useAIScheduleCreation({
       academicYear,
       activeStudents.length,
       activeTeachers.length,
+      aiResultStorageKey,
       classrooms,
       closeScheduleDialogs,
       courseDates,
